@@ -6,7 +6,7 @@
 
 > **End state:** A working flight logbook app with auth (self-hosted Logto), offline reads/writes (Convex + Replicate), and a PWA shell.
 
-> **Philosophy:** Fully embrace Convex and its best practices. Convex is the database, the server, and the sync engine. No Postgres, no Drizzle, no PowerSync, no hand-rolled API endpoints. The write path that took 14 files in the Postgres architecture is replaced by Convex mutations. Offline sync that required PowerSync + TanStack DB + a connector is replaced by Replicate.
+> **Philosophy:** Fully embrace Convex and its best practices. Convex is the database, the server, and the sync engine. Replicate provides offline reads/writes via local SQLite with CRDT-based sync. No hand-rolled API endpoints — Convex mutations handle the write path.
 
 ---
 
@@ -26,8 +26,8 @@ This guide is designed for **one step (or a few sub-steps) per AI session**. Eac
 
 | Session | Steps | What gets built | Status |
 |---------|-------|-----------------|--------|
-| 1 | 1–3 | Environment, deps, Convex schema | |
-| 2 | 4 | Auth (Logto + Convex OIDC) | |
+| 1 | 1–3 | Environment, deps, Auth (Logto + Convex OIDC) | |
+| 2 | 4 | Convex schema | |
 | 3 | 5–6 | Replicate server functions + client collections | |
 | 4 | 7 | App layout + offline auth resilience | |
 | 5 | 8 | Flight logbook UI | |
@@ -40,8 +40,8 @@ This guide is designed for **one step (or a few sub-steps) per AI session**. Eac
 
 1. [Environment & Prerequisites](#1-environment--prerequisites)
 2. [Project Setup & Dependencies](#2-project-setup--dependencies)
-3. [Convex Schema](#3-convex-schema)
-4. [Auth Integration (Logto + Convex)](#4-auth-integration-logto--convex)
+3. [Auth Integration (Logto + Convex)](#3-auth-integration-logto--convex)
+4. [Convex Schema](#4-convex-schema)
 5. [Replicate Server Functions](#5-replicate-server-functions)
 6. [Replicate Client Collections](#6-replicate-client-collections)
 7. [App Layout & Offline Auth Resilience](#7-app-layout--offline-auth-resilience)
@@ -53,19 +53,6 @@ This guide is designed for **one step (or a few sub-steps) per AI session**. Eac
 ---
 
 ## Architecture Overview
-
-### What Convex replaces
-
-| Postgres + PowerSync stack | Convex stack |
-|---------------------------|-------------|
-| Postgres.app (database) | Convex cloud (database) |
-| Drizzle ORM (schema + queries) | Convex schema + functions |
-| `drizzle-kit` (migrations) | Convex automatic schema enforcement |
-| PowerSync Docker (sync engine) | Replicate (sync engine) |
-| PowerSync client schema | Replicate schema (shared server + client) |
-| PowerSync connector (`uploadData`) | Replicate handles sync automatically |
-| 14 SvelteKit API endpoint files | Convex mutations (one per table) |
-| TanStack DB collections | Replicate collections |
 
 ### Data flow
 
@@ -110,13 +97,6 @@ This guide is designed for **one step (or a few sub-steps) per AI session**. Eac
 - **bun** — package manager
 - **Node.js 18+** — for Convex CLI
 
-### What you DON'T need (compared to the Postgres guide)
-
-- ~~Postgres.app~~ — Convex is the database
-- ~~`wal_level = logical`~~ — no Postgres replication to configure
-- ~~PowerSync Docker container~~ — Replicate handles sync
-- ~~Separate bucket storage Postgres~~ — Convex manages its own state
-
 ### Create a Convex account
 
 1. Go to [dashboard.convex.dev](https://dashboard.convex.dev) and sign up
@@ -124,7 +104,7 @@ This guide is designed for **one step (or a few sub-steps) per AI session**. Eac
 
 ### Set up Logto locally (if not already running)
 
-Same as the Postgres guide — run Logto in Docker on port 3001. Create a **Single Page Application** (not Traditional Web — since the app routes are CSR):
+Run Logto in Docker on port 3001. Create a **Single Page Application** (not Traditional Web — since the app routes are CSR):
 
 1. Open Logto Console at `http://localhost:3001`
 2. Create a new **Single Page Application**
@@ -162,7 +142,7 @@ bun add @trestleinc/replicate
 bun add @logto/browser
 ```
 
-> **Note:** No `drizzle-orm`, `postgres`, `@powersync/web`, `@journeyapps/wa-sqlite`, or `@tanstack/*` packages. Replicate bundles TanStack DB internally. The entire server-side data layer is Convex.
+> **Note:** Replicate bundles TanStack DB internally — no separate `@tanstack/*` packages needed.
 
 ### 2.3 Configure Convex for SvelteKit
 
@@ -211,13 +191,245 @@ npx convex env set LOGTO_API_IDENTIFIER https://honu-log-api.dev
 
 ---
 
-## 3. Convex Schema
+## 3. Auth Integration (Logto + Convex)
 
-> **Context:** Steps 1–2 are complete. SvelteKit project exists, Convex is initialized, dependencies installed. This step defines the database schema — the single source of truth for all flight data.
+> **Context:** Steps 1–2 are complete. SvelteKit project exists, Convex is initialized, dependencies installed. This step wires up authentication early so we have user IDs ready before defining the schema, and so we can verify the hardest integration point first.
+
+### Architecture
+
+```
+Browser                          Logto                    Convex
+  │                                │                        │
+  │──── redirect to /authorize ───>│                        │
+  │<─── redirect with auth code ───│                        │
+  │──── exchange for access token ─>│                        │
+  │<─── access token (JWT) ────────│                        │
+  │                                                         │
+  │──── WebSocket + access token ──────────────────────────>│
+  │                                                         │── verify JWT
+  │                                                         │   via Logto JWKS
+  │<─── authenticated connection ──────────────────────────│
+```
+
+The Logto browser SDK handles the OAuth redirect flow. An **access token** (not ID token) is passed to the Convex client. Convex verifies it via Logto's JWKS endpoint using the `customJwt` provider type.
+
+> **Proven working:** This configuration comes from [a confirmed working setup](https://github.com/get-convex/convex-backend/issues/75#issuecomment-2918783173) of SvelteKit + Logto + Convex. The key insight is using `customJwt` with Logto's access token (not the standard OIDC ID token flow), which also gives you Logto's scopes/permissions in Convex functions.
+
+### 3.1 Logto setup for Convex
+
+In Logto Console:
+
+1. **Use RSA algorithm for private keys** — for self-hosted Logto, check your private key config and restart the Docker service after changing
+2. **Create an API Resource** with an identifier like `https://honu-log-api.dev` (this becomes the `applicationID` in Convex and the `audience` when requesting tokens)
+3. **Create permissions (scopes)** and user roles if needed (optional for MVP — useful later for admin features)
+4. **(Optional) Customize access token claims** — add user email/name so Convex functions can access them without a separate lookup. In Logto Console → JWT Customization:
+
+```javascript
+const getCustomJwtClaims = async ({ token, context, environmentVariables, api }) => {
+	return {
+		email: context.user.primaryEmail,
+		username: context.user.username
+	};
+};
+```
+
+### 3.2 Convex auth config
+
+#### `src/convex/auth.config.ts`
+
+```typescript
+export default {
+	providers: [
+		{
+			type: 'customJwt',
+			// The API Identifier from your Logto API Resource
+			applicationID: process.env.LOGTO_API_IDENTIFIER!,
+			// Logto OIDC issuer endpoint
+			issuer: process.env.LOGTO_ENDPOINT + '/oidc',
+			// Logto JWKS endpoint for token verification
+			jwks: process.env.LOGTO_ENDPOINT + '/oidc/jwks',
+			// Must match Logto's signing algorithm (RSA)
+			algorithm: 'RS256'
+		}
+	]
+};
+```
+
+Set the environment variables via Convex CLI:
+
+```bash
+npx convex env set LOGTO_ENDPOINT http://localhost:3001
+npx convex env set LOGTO_API_IDENTIFIER https://honu-log-api.dev
+```
+
+> **What you get in Convex functions:** After auth is configured, `ctx.auth.getUserIdentity()` returns:
+> ```json
+> {
+>   "tokenIdentifier": "https://...",
+>   "issuer": "https://your-logto/oidc",
+>   "subject": "user-uuid",
+>   "client_id": "your-app-id",
+>   "email": "pilot@example.com",
+>   "scope": "your:permissions",
+>   "username": "callsign"
+> }
+> ```
+> The `subject` field is the user's Logto `sub` — use this as `user_id` throughout.
+
+> **Verify with jwt.io:** After getting an access token from Logto, decode it and confirm `iss` matches your issuer URL and `aud` matches your `applicationID`. Mismatches are the #1 cause of auth failures.
+
+### 3.3 Auth helper (server-side)
+
+Create a reusable helper following Convex best practices ("most logic should be written as plain TypeScript functions"):
+
+#### `src/convex/model/auth.ts`
+
+```typescript
+import { QueryCtx, MutationCtx } from '../_generated/server';
+
+export async function getAuthUser(ctx: QueryCtx | MutationCtx) {
+	const identity = await ctx.auth.getUserIdentity();
+	if (!identity) throw new Error('Not authenticated');
+	return identity;
+}
+
+export async function getUserId(ctx: QueryCtx | MutationCtx) {
+	const identity = await getAuthUser(ctx);
+	return identity.subject; // Logto `sub` claim
+}
+```
+
+### 3.4 Logto client-side integration
+
+#### `src/lib/auth.ts`
+
+```typescript
+import LogtoClient from '@logto/browser';
+import {
+	PUBLIC_LOGTO_ENDPOINT,
+	PUBLIC_LOGTO_APP_ID,
+	PUBLIC_LOGTO_API_IDENTIFIER
+} from '$env/static/public';
+
+let client: LogtoClient | null = null;
+
+export function getLogtoClient() {
+	if (!client) {
+		client = new LogtoClient({
+			endpoint: PUBLIC_LOGTO_ENDPOINT,
+			appId: PUBLIC_LOGTO_APP_ID,
+			// Request access tokens scoped to the Convex API resource
+			resources: [PUBLIC_LOGTO_API_IDENTIFIER]
+		});
+	}
+	return client;
+}
+
+// Fetch access token for Convex (not ID token)
+export async function getConvexToken() {
+	const logto = getLogtoClient();
+	return logto.getAccessToken(PUBLIC_LOGTO_API_IDENTIFIER);
+}
+```
+
+### 3.5 Callback route
+
+#### `src/routes/callback/+page.svelte`
+
+```svelte
+<script>
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { getLogtoClient } from '$lib/auth';
+
+	onMount(async () => {
+		const logto = getLogtoClient();
+		await logto.handleSignInCallback(window.location.href);
+		goto('/app/flights');
+	});
+</script>
+
+<p>Signing in...</p>
+```
+
+### 3.6 Landing page
+
+#### `src/routes/+page.svelte`
+
+```svelte
+<script>
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { getLogtoClient } from '$lib/auth';
+
+	let authenticated = $state(false);
+	let loading = $state(true);
+
+	onMount(async () => {
+		const logto = getLogtoClient();
+		authenticated = await logto.isAuthenticated();
+		loading = false;
+	});
+
+	async function signIn() {
+		const logto = getLogtoClient();
+		await logto.signIn('http://localhost:5173/callback');
+	}
+
+	async function signOut() {
+		const logto = getLogtoClient();
+		await logto.signOut('http://localhost:5173/');
+	}
+</script>
+
+{#if loading}
+	<p>Loading...</p>
+{:else if authenticated}
+	<p>Welcome back!</p>
+	<a href="/app/flights">Go to Logbook</a>
+	<button onclick={signOut}>Sign Out</button>
+{:else}
+	<h1>Flight Logbook</h1>
+	<p>Sign in to start logging flights.</p>
+	<button onclick={signIn}>Sign In</button>
+{/if}
+```
+
+### 3.7 Convex provider with auth
+
+#### `src/routes/+layout.svelte`
+
+Wire up the Convex client with Logto token fetching:
+
+```svelte
+<script>
+	import { PUBLIC_CONVEX_URL } from '$env/static/public';
+	import { setupConvex } from 'convex-svelte';
+	import { getLogtoClient } from '$lib/auth';
+
+	const { children } = $props();
+
+	// setupConvex with auth token provider
+	// Check convex-svelte docs for the auth integration API —
+	// you need to pass a fetchAccessToken function that returns
+	// the Logto access token for Convex to verify.
+	setupConvex(PUBLIC_CONVEX_URL);
+</script>
+
+{@render children()}
+```
+
+> **Implementation note:** The exact API for passing auth tokens to `convex-svelte` may differ from React's `ConvexProviderWithAuth`. Check the `convex-svelte` package docs at implementation time. The key requirement: provide a `fetchAccessToken` callback that calls `getConvexToken()` (from `$lib/auth`) and returns the access token string. This is the access token scoped to your Logto API Resource, NOT the ID token.
+
+---
+
+## 4. Convex Schema
+
+> **Context:** Steps 1–3 are complete. Auth is wired up — you have a working sign-in flow and user IDs from Logto's `sub` claim. This step defines the database schema — the single source of truth for all flight data.
 
 ### Entity relationship overview
 
-Same domain model as the Postgres version, but junction tables are embedded as arrays in the flights document:
+Landings and approaches are embedded as arrays in the flights document rather than separate tables:
 
 ```
 ┌─────────────────┐
@@ -233,23 +445,48 @@ Same domain model as the Postgres version, but junction tables are embedded as a
          │                   │  user_id set   │ ← user-custom
 ┌────────┴───────────────────┴──────┐
 │              flights               │
-│  date, OOOI times, time categories │
-│  landings: [{ type, count }]       │  ← embedded, not junction table
-│  approaches: [{ type, rwy, ... }]  │  ← embedded, not junction table
+│  date, OOOI timestamps, durations │
+│  landings: [{ type, count }]      │  ← embedded array
+│  approaches: [{ type, rwy, ... }] │  ← embedded array
 └───────────────────────────────────┘
 ```
 
 ### Why embed landings and approaches
 
-In the Postgres schema, `flight_landings` and `flight_approaches` are separate junction tables. In Convex, they're embedded arrays in the flight document because:
+Landings and approaches are embedded arrays in the flight document because:
 
 - They're always read/written in the context of a flight — never queried independently
-- Deleting a flight automatically deletes its landings/approaches (no cascade logic needed)
-- One read gets the full flight record (no joins, fewer function calls, lower Convex billing)
+- Deleting a flight automatically deletes its landings/approaches
+- One read gets the full flight record (no joins, fewer function calls)
 - The arrays are tiny (1–3 landings, 0–2 approaches per flight)
 - For aggregates ("total night landings this year"), query flights by date range and sum the embedded arrays
 
-### 3.1 Replicate schema definitions
+### OOOI time storage design
+
+OOOI times (Out, Off, On, In) are stored as **ISO 8601 UTC strings** (`v.string()`), following Convex's recommendation to store calendar dates and clock times as strings. Example: `"2024-03-15T23:50:00Z"`.
+
+**Why ISO 8601 strings:**
+- Human-readable in the Convex dashboard, logs, and JSON exports
+- Lexicographically sortable and indexable
+- Duration math is easy via the Temporal API: `Temporal.Instant.from(timeIn).since(Temporal.Instant.from(timeOut))`
+- Convex recommends strings for "calendar dates and clock times" — OOOI times are exactly that
+
+**`flight_date` stays as a string** (`"2024-03-15"`) — it's a calendar concept (the date the trip started), not a point in time.
+
+**UI input flow:**
+1. User picks a flight date: `2024-03-15`
+2. User enters OUT: `2350` → stored as `"2024-03-15T23:50:00Z"`
+3. User enters OFF: `0010` → numerically less than `2350`, so next day → `"2024-03-16T00:10:00Z"`
+4. User enters ON: `0340` → still after OFF → `"2024-03-16T03:40:00Z"`
+5. User enters IN: `0355` → still after ON → `"2024-03-16T03:55:00Z"`
+
+**Parsing rule:** Each OOOI time is resolved relative to the previous one. If the entered time (as HHMM) is numerically less than the previous time, it rolled past midnight — add one day. OUT anchors to `flight_date`.
+
+**Display:** Extract `HH:MM` from the ISO string (e.g., `"2024-03-15T23:50:00Z"` → `"23:50"`).
+
+**Date/time handling:** Use the Temporal API (`Temporal.PlainDate`, `Temporal.Instant`) for all parsing, comparison, and duration math. Temporal is now available in modern JS runtimes and eliminates the footguns of `Date`.
+
+### 4.1 Replicate schema definitions
 
 Create one schema file per entity in `src/convex/schema/`. These definitions are shared between server (Convex functions) and client (Replicate collections).
 
@@ -327,18 +564,21 @@ export const flightSchema = schema.define({
 		aircraft_id: v.optional(v.string()),
 
 		// Date & Route
-		flight_date: v.string(), // "2024-03-15" (ISO date string)
+		flight_date: v.string(), // "2024-03-15" (ISO date string, the date the trip started)
 		flight_number: v.optional(v.string()),
 		departure_airport_id: v.optional(v.string()),
 		arrival_airport_id: v.optional(v.string()),
 
-		// OOOI Times — text "HH:MM" in UTC
+		// OOOI Times — ISO 8601 UTC strings (e.g. "2024-03-15T23:50:00Z")
+		// User enters "2350" in Zulu, we resolve to full ISO string anchored to flight_date
 		time_out: v.optional(v.string()),
 		time_off: v.optional(v.string()),
 		time_on: v.optional(v.string()),
 		time_in: v.optional(v.string()),
 
 		// Duration fields — integer MINUTES
+		// total_time (block) and flight_time can be computed from OOOI times,
+		// but kept as explicit fields for flights logged without full OOOI data
 		total_time: v.number(),
 		pic: v.optional(v.number()),
 		sic: v.optional(v.number()),
@@ -351,7 +591,7 @@ export const flightSchema = schema.define({
 
 		remarks: v.optional(v.string()),
 
-		// Embedded junction data (replaces separate tables)
+		// Embedded landing and approach data
 		landings: v.optional(
 			v.array(
 				v.object({
@@ -388,7 +628,7 @@ export const flightSchema = schema.define({
 });
 ```
 
-### 3.2 Convex schema (wire it up)
+### 4.2 Convex schema (wire it up)
 
 #### `src/convex/schema.ts`
 
@@ -407,7 +647,7 @@ export default defineSchema({
 });
 ```
 
-### 3.3 Register Replicate component
+### 4.3 Register Replicate component
 
 #### `src/convex/convex.config.ts`
 
@@ -422,246 +662,14 @@ export default app;
 
 ### Design notes
 
-- **4 tables instead of 6** — landings and approaches are embedded in flights, eliminating 2 junction tables, their indexes, and all the cascade/ownership logic.
+- **4 tables** — landings and approaches are embedded arrays in flights, so no separate tables or cascade logic needed.
 - **`id` is a string field on the shape** — Replicate uses this as the client-side document key (`crypto.randomUUID()`). Convex also assigns its own `_id` internally.
 - **Foreign keys are strings** — Convex `v.id("table")` validates at write time, but Replicate schemas use `v.string()` for cross-table references since the client generates IDs offline.
-- **`user_id` is the Logto `sub` claim** — same as the Postgres version. Every query filters by it.
-- **Duration fields are integer minutes** — same convention. Convert for display only.
-- **OOOI times are text "HH:MM" in UTC** — same convention.
-- **Defaults are declared in the schema** — Replicate applies these on insert, replacing the `DEFAULT` clauses from Drizzle/Postgres.
+- **`user_id` is the Logto `sub` claim.** Every query filters by it.
+- **Duration fields are integer minutes** — convert for display only.
+- **OOOI times are ISO 8601 UTC strings** — e.g. `"2024-03-15T23:50:00Z"`. Human-readable, sortable, following Convex's recommendation for clock times. User enters Zulu HHMM, client resolves to full ISO string with midnight-rollover logic. Use Temporal API for parsing and duration math.
+- **Defaults are declared in the schema** — Replicate applies these on insert.
 - **No `created_at`/`updated_at`** — Convex provides `_creationTime` automatically. Replicate tracks `timestamp` internally for sync ordering. If you need `updated_at` for display, add it to the shape and set it in your mutation logic.
-
----
-
-## 4. Auth Integration (Logto + Convex)
-
-> **Context:** Steps 1–3 are complete. Convex schema is defined with 4 tables. Replicate component is registered. This step wires up authentication so users can sign in via Logto and Convex functions can verify their identity.
-
-### Architecture
-
-```
-Browser                          Logto                    Convex
-  │                                │                        │
-  │──── redirect to /authorize ───>│                        │
-  │<─── redirect with auth code ───│                        │
-  │──── exchange for access token ─>│                        │
-  │<─── access token (JWT) ────────│                        │
-  │                                                         │
-  │──── WebSocket + access token ──────────────────────────>│
-  │                                                         │── verify JWT
-  │                                                         │   via Logto JWKS
-  │<─── authenticated connection ──────────────────────────│
-```
-
-The Logto browser SDK handles the OAuth redirect flow. An **access token** (not ID token) is passed to the Convex client. Convex verifies it via Logto's JWKS endpoint using the `customJwt` provider type.
-
-> **Proven working:** This configuration comes from [a confirmed working setup](https://github.com/get-convex/convex-backend/issues/75#issuecomment-2918783173) of SvelteKit + Logto + Convex. The key insight is using `customJwt` with Logto's access token (not the standard OIDC ID token flow), which also gives you Logto's scopes/permissions in Convex functions.
-
-### 4.1 Logto setup for Convex
-
-In Logto Console:
-
-1. **Use RSA algorithm for private keys** — for self-hosted Logto, check your private key config and restart the Docker service after changing
-2. **Create an API Resource** with an identifier like `https://honu-log-api.dev` (this becomes the `applicationID` in Convex and the `audience` when requesting tokens)
-3. **Create permissions (scopes)** and user roles if needed (optional for MVP — useful later for admin features)
-4. **(Optional) Customize access token claims** — add user email/name so Convex functions can access them without a separate lookup. In Logto Console → JWT Customization:
-
-```javascript
-const getCustomJwtClaims = async ({ token, context, environmentVariables, api }) => {
-	return {
-		email: context.user.primaryEmail,
-		username: context.user.username
-	};
-};
-```
-
-### 4.2 Convex auth config
-
-#### `src/convex/auth.config.ts`
-
-```typescript
-export default {
-	providers: [
-		{
-			type: 'customJwt',
-			// The API Identifier from your Logto API Resource
-			applicationID: process.env.LOGTO_API_IDENTIFIER!,
-			// Logto OIDC issuer endpoint
-			issuer: process.env.LOGTO_ENDPOINT + '/oidc',
-			// Logto JWKS endpoint for token verification
-			jwks: process.env.LOGTO_ENDPOINT + '/oidc/jwks',
-			// Must match Logto's signing algorithm (RSA)
-			algorithm: 'RS256'
-		}
-	]
-};
-```
-
-Set the environment variables via Convex CLI:
-
-```bash
-npx convex env set LOGTO_ENDPOINT http://localhost:3001
-npx convex env set LOGTO_API_IDENTIFIER https://honu-log-api.dev
-```
-
-> **What you get in Convex functions:** After auth is configured, `ctx.auth.getUserIdentity()` returns:
-> ```json
-> {
->   "tokenIdentifier": "https://...",
->   "issuer": "https://your-logto/oidc",
->   "subject": "user-uuid",
->   "client_id": "your-app-id",
->   "email": "pilot@example.com",
->   "scope": "your:permissions",
->   "username": "callsign"
-> }
-> ```
-> The `subject` field is the user's Logto `sub` — use this as `user_id` throughout.
-
-> **Verify with jwt.io:** After getting an access token from Logto, decode it and confirm `iss` matches your issuer URL and `aud` matches your `applicationID`. Mismatches are the #1 cause of auth failures.
-
-### 4.3 Auth helper (server-side)
-
-Create a reusable helper following Convex best practices ("most logic should be written as plain TypeScript functions"):
-
-#### `src/convex/model/auth.ts`
-
-```typescript
-import { QueryCtx, MutationCtx } from '../_generated/server';
-
-export async function getAuthUser(ctx: QueryCtx | MutationCtx) {
-	const identity = await ctx.auth.getUserIdentity();
-	if (!identity) throw new Error('Not authenticated');
-	return identity;
-}
-
-export async function getUserId(ctx: QueryCtx | MutationCtx) {
-	const identity = await getAuthUser(ctx);
-	return identity.subject; // Logto `sub` claim
-}
-```
-
-### 4.3 Logto client-side integration
-
-#### `src/lib/auth.ts`
-
-```typescript
-import LogtoClient from '@logto/browser';
-import {
-	PUBLIC_LOGTO_ENDPOINT,
-	PUBLIC_LOGTO_APP_ID,
-	PUBLIC_LOGTO_API_IDENTIFIER
-} from '$env/static/public';
-
-let client: LogtoClient | null = null;
-
-export function getLogtoClient() {
-	if (!client) {
-		client = new LogtoClient({
-			endpoint: PUBLIC_LOGTO_ENDPOINT,
-			appId: PUBLIC_LOGTO_APP_ID,
-			// Request access tokens scoped to the Convex API resource
-			resources: [PUBLIC_LOGTO_API_IDENTIFIER]
-		});
-	}
-	return client;
-}
-
-// Fetch access token for Convex (not ID token)
-export async function getConvexToken() {
-	const logto = getLogtoClient();
-	return logto.getAccessToken(PUBLIC_LOGTO_API_IDENTIFIER);
-}
-```
-
-### 4.4 Callback route
-
-#### `src/routes/callback/+page.svelte`
-
-```svelte
-<script>
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { getLogtoClient } from '$lib/auth';
-
-	onMount(async () => {
-		const logto = getLogtoClient();
-		await logto.handleSignInCallback(window.location.href);
-		goto('/app/flights');
-	});
-</script>
-
-<p>Signing in...</p>
-```
-
-### 4.5 Landing page
-
-#### `src/routes/+page.svelte`
-
-```svelte
-<script>
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { getLogtoClient } from '$lib/auth';
-
-	let authenticated = $state(false);
-	let loading = $state(true);
-
-	onMount(async () => {
-		const logto = getLogtoClient();
-		authenticated = await logto.isAuthenticated();
-		loading = false;
-	});
-
-	async function signIn() {
-		const logto = getLogtoClient();
-		await logto.signIn('http://localhost:5173/callback');
-	}
-
-	async function signOut() {
-		const logto = getLogtoClient();
-		await logto.signOut('http://localhost:5173/');
-	}
-</script>
-
-{#if loading}
-	<p>Loading...</p>
-{:else if authenticated}
-	<p>Welcome back!</p>
-	<a href="/app/flights">Go to Logbook</a>
-	<button onclick={signOut}>Sign Out</button>
-{:else}
-	<h1>Flight Logbook</h1>
-	<p>Sign in to start logging flights.</p>
-	<button onclick={signIn}>Sign In</button>
-{/if}
-```
-
-### 4.6 Convex provider with auth
-
-#### `src/routes/+layout.svelte`
-
-Wire up the Convex client with Logto token fetching:
-
-```svelte
-<script>
-	import { PUBLIC_CONVEX_URL } from '$env/static/public';
-	import { setupConvex } from 'convex-svelte';
-	import { getLogtoClient } from '$lib/auth';
-
-	const { children } = $props();
-
-	// setupConvex with auth token provider
-	// Check convex-svelte docs for the auth integration API —
-	// you need to pass a fetchAccessToken function that returns
-	// the Logto access token for Convex to verify.
-	setupConvex(PUBLIC_CONVEX_URL);
-</script>
-
-{@render children()}
-```
-
-> **Implementation note:** The exact API for passing auth tokens to `convex-svelte` may differ from React's `ConvexProviderWithAuth`. Check the `convex-svelte` package docs at implementation time. The key requirement: provide a `fetchAccessToken` callback that calls `getConvexToken()` (from `$lib/auth`) and returns the access token string. This is the access token scoped to your Logto API Resource, NOT the ID token.
 
 ---
 
@@ -745,7 +753,7 @@ The authorization should:
 - On update/delete: verify the document belongs to the authenticated user
 - On read (material/delta): filter to only return documents where `user_id` matches
 
-> **This is the most important security boundary.** In the Postgres guide, every API endpoint manually checked `user_id`. Here, the authorization logic is centralized in one place per collection. If Replicate doesn't support authorization hooks directly, wrap the generated functions with auth checks.
+> **This is the most important security boundary.** The authorization logic is centralized in one place per collection. If Replicate doesn't support authorization hooks directly, wrap the generated functions with auth checks.
 
 ---
 
@@ -905,10 +913,10 @@ await flights.init();
 
 ```
 src/routes/
-  +page.svelte              ← Public landing/login page — done in step 4
-  +layout.svelte            ← Root layout (Convex provider) — done in step 4
+  +page.svelte              ← Public landing/login page — done in step 3
+  +layout.svelte            ← Root layout (Convex provider) — done in step 3
   callback/
-    +page.svelte            ← Logto callback — done in step 4
+    +page.svelte            ← Logto callback — done in step 3
   (app)/                    ← Authenticated route group (SSR DISABLED)
     +layout.ts              ← ssr = false
     +layout.svelte          ← Auth gate + collection init
@@ -996,12 +1004,11 @@ export const ssr = false;
 {/if}
 ```
 
-### Key differences from the Postgres guide
+### Key design decisions
 
-- No `+layout.server.ts` needed in `(app)/` — auth state comes from the Logto browser SDK, not SvelteKit server locals
-- Collection init replaces PowerSync `getPowerSyncDb()` + connector setup
+- No `+layout.server.ts` needed in `(app)/` — auth state comes from the Logto browser SDK, not server locals
 - `Promise.all` initializes all 4 collections in parallel
-- Error handling on init allows the app to work with previously cached data
+- Error handling on init allows the app to work with previously cached data when offline
 
 ---
 
@@ -1009,13 +1016,13 @@ export const ssr = false;
 
 > **Context:** Steps 1–7 are complete. The app shell is in place with auth, offline resilience, and collection initialization. This step builds the actual flight log page to prove the full stack works end-to-end.
 
-### 8.1 Time display utilities
-
-Same as the Postgres guide — durations are integer minutes, display as decimal hours or H:MM.
+### 8.1 Time utilities
 
 #### `src/lib/utils/time.ts`
 
 ```typescript
+// --- Duration display (integer minutes → human-readable) ---
+
 export function minutesToDecimal(minutes: number): string {
 	return (minutes / 60).toFixed(1);
 }
@@ -1029,6 +1036,57 @@ export function minutesToHMM(minutes: number): string {
 export function decimalToMinutes(decimal: number): number {
 	return Math.round(decimal * 60);
 }
+
+// --- OOOI time parsing (Zulu HHMM input → ISO 8601 string) ---
+
+// Parse "2350" into { hours: 23, minutes: 50 }. Returns null if invalid.
+export function parseZuluInput(input: string): { hours: number; minutes: number } | null {
+	const cleaned = input.replace(':', '').padStart(4, '0');
+	if (!/^\d{4}$/.test(cleaned)) return null;
+	const hours = parseInt(cleaned.slice(0, 2), 10);
+	const minutes = parseInt(cleaned.slice(2), 10);
+	if (hours > 23 || minutes > 59) return null;
+	return { hours, minutes };
+}
+
+// Resolve an OOOI time input to an ISO 8601 UTC string.
+// flightDate: "2024-03-15", input: "2350", prev: previous OOOI ISO string (or null for OUT)
+export function resolveOoiTime(
+	flightDate: string,
+	input: string,
+	prev: string | null
+): string | null {
+	const parsed = parseZuluInput(input);
+	if (!parsed) return null;
+
+	const date = Temporal.PlainDate.from(flightDate);
+	const time = Temporal.PlainTime.from({
+		hour: parsed.hours,
+		minute: parsed.minutes
+	});
+	let dt = date.toPlainDateTime(time).toZonedDateTime('UTC');
+
+	// If we have a previous time and this one isn't after it, we crossed midnight
+	if (prev) {
+		const prevInstant = Temporal.Instant.from(prev);
+		if (Temporal.Instant.compare(dt.toInstant(), prevInstant) <= 0) {
+			dt = dt.add({ days: 1 });
+		}
+	}
+
+	return dt.toInstant().toString(); // "2024-03-15T23:50:00Z"
+}
+
+// Extract "HH:MM" Zulu from an ISO 8601 string
+export function isoToZulu(iso: string): string {
+	return iso.slice(11, 16);
+}
+
+// Compute duration between two ISO 8601 strings in integer minutes
+export function durationMinutes(start: string, end: string): number {
+	const duration = Temporal.Instant.from(end).since(Temporal.Instant.from(start));
+	return Math.round(duration.total('minutes'));
+}
 ```
 
 ### 8.2 Flights page — `src/routes/(app)/flights/+page.svelte`
@@ -1037,14 +1095,23 @@ Build a minimal flight log page:
 
 1. **Get the flights collection** — already initialized by the layout
 2. **Set up a reactive query** — use the collection's query API to get flights sorted by date
-3. **Build a simple form** with: date, departure airport, arrival airport, aircraft, OOOI times, total time (minutes), landings
-4. **On submit:** call `collection.insert()` with `crypto.randomUUID()` as the id, the form data, and the authenticated user's `sub` as `user_id`. Landings go directly in the embedded array:
+3. **Build a simple form** with: date, departure airport, arrival airport, aircraft, OOOI times (4-digit Zulu input fields), total time (minutes), landings
+4. **On submit:** Parse OOOI inputs via `resolveOoiTime()` (from `$lib/utils/time`), compute block time if all 4 OOOI times are present, then call `collection.insert()`:
    ```typescript
+   const timeOut = resolveOoiTime(flightDate, outInput, null);
+   const timeOff = resolveOoiTime(flightDate, offInput, timeOut);
+   const timeOn = resolveOoiTime(flightDate, onInput, timeOff);
+   const timeIn = resolveOoiTime(flightDate, inInput, timeOn);
+
    flights.get().insert({
        id: crypto.randomUUID(),
        user_id: user.sub,
        flight_date: '2024-03-15',
-       total_time: 138,
+       time_out: timeOut,
+       time_off: timeOff,
+       time_on: timeOn,
+       time_in: timeIn,
+       total_time: timeOut && timeIn ? durationMinutes(timeOut, timeIn) : 138,
        landings: [{ landing_type: 'day', count: 1 }],
        // ... other fields
    });
@@ -1140,7 +1207,7 @@ npx convex dev
 bun run dev
 ```
 
-> **Note:** No PowerSync Docker to start. Convex runs in the cloud even during development.
+> **Note:** Convex runs in the cloud even during development — no local database containers needed.
 
 ### Test sequence
 
@@ -1250,26 +1317,3 @@ Push to main — Coolify auto-deploys.
 - The Logto browser SDK should handle token refresh automatically if the refresh token is still valid.
 - If refresh fails, the user will need to sign in again. The cached user in `localStorage` keeps the UI working, but Convex sync won't resume until re-authenticated.
 
----
-
-## Appendix: What this guide eliminated
-
-Compared to the Postgres + PowerSync implementation guide:
-
-| Eliminated | Why |
-|-----------|-----|
-| Postgres.app setup + `wal_level = logical` | Convex is the database |
-| `drizzle.config.ts` + `src/lib/server/db/` | No ORM needed |
-| `bunx drizzle-kit generate/migrate` | Convex handles schema automatically |
-| PowerSync Docker (`docker-compose.powersync.yaml`) | Replicate handles sync |
-| PowerSync config (`powersync/powersync.yaml` + sync rules) | Replicate handles sync rules |
-| PowerSync client schema (`src/lib/powersync/schema.ts`) | Replicate schema is shared |
-| PowerSync db singleton (`src/lib/powersync/db.ts`) | Replicate manages its own db |
-| PowerSync connector (`src/lib/powersync/connector.ts`) | Replicate handles upload/download |
-| 14 API endpoint files (`src/routes/api/**`) | Convex mutations replace the write path |
-| `flight_landings` table | Embedded in flights |
-| `flight_approaches` table | Embedded in flights |
-| PlanetScale Postgres (production) | Convex cloud |
-| PowerSync Cloud (production) | Included in Convex |
-
-**Net result:** ~7 sessions instead of ~12. The entire write path (step 11 in the Postgres guide — the biggest step, split across two sessions) is replaced by 4 short files in step 5.
