@@ -1,6 +1,12 @@
 {
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.logto.io)",
+      "WebFetch(domain:docs.orbstack.dev)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "svelte"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
