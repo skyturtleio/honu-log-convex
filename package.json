@@ -7,13 +7,13 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
-		"prepare": "svelte-kit sync || echo ''",
+		"prepare": "husky",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
 		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run"
+		"test": "bun run test:unit --run"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.2",
@@ -27,6 +27,8 @@
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.14.0",
 		"globals": "^17.3.0",
+		"husky": "^9.1.7",
+		"lint-staged": "^16.4.0",
 		"playwright": "^1.58.2",
 		"prettier": "^3.8.1",
 		"prettier-plugin-svelte": "^3.4.1",
@@ -37,6 +39,15 @@
 		"vite": "^7.3.1",
 		"vitest": "^4.1.0",
 		"vitest-browser-svelte": "^2.0.2"
+	},
+	"lint-staged": {
+		"*.{js,ts,svelte}": [
+			"prettier --write",
+			"eslint --fix"
+		],
+		"*.{json,css,md,html}": [
+			"prettier --write"
+		]
 	},
 	"dependencies": {
 		"@logto/client": "^3.1.7",
