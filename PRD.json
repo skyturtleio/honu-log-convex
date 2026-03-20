@@ -48,7 +48,7 @@
       "jwks is set to LOGTO_ENDPOINT + '/oidc/jwks'",
       "applicationID uses LOGTO_API_IDENTIFIER"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "description": "Server-side auth helper",
@@ -58,7 +58,7 @@
       "Exports getUserId() that returns identity.subject (Logto sub claim)",
       "Both functions accept QueryCtx | MutationCtx parameter"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "description": "OOOI time parsing and duration utilities with tests",
@@ -115,7 +115,7 @@
       "The token flow works with the existing @logto/sveltekit hooks.server.ts setup",
       "The approach follows the customJwt pattern from https://github.com/get-convex/convex-backend/issues/75#issuecomment-2918783173"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "description": "Wire root layout with Convex provider",
@@ -125,7 +125,7 @@
       "The Convex client authenticates using the Logto access token",
       "Existing favicon and children rendering preserved"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "description": "Logto OAuth callback route",
@@ -135,7 +135,7 @@
       "After successful callback, user is redirected to /app/flights",
       "Loading state is shown during callback processing"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "description": "Update landing page for authenticated state",
@@ -145,7 +145,7 @@
       "Uses server-provided user data (not client-side Logto SDK)",
       "Sign in/out uses form actions (existing pattern preserved)"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "description": "App route group with auth gate and collection init",
@@ -157,7 +157,7 @@
       "All 4 Replicate collections initialized via Promise.all on mount",
       "Shows loading state during init, redirects unauthenticated users to /"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "description": "Flights list page",

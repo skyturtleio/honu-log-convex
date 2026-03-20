@@ -10,7 +10,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		const token = await logtoClient.getAccessToken('https://honu-log-api.dev');
 		if (!token) throw error(401, 'No access token available');
 		return json({ token });
-	} catch (err) {
+	} catch {
 		throw error(401, 'Not authenticated or token expired');
 	}
 };

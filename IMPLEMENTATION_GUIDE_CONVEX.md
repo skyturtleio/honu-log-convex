@@ -196,12 +196,45 @@ PUBLIC_LOGTO_API_IDENTIFIER=https://honu-log-api.dev
 PUBLIC_CONVEX_SITE_URL=http://127.0.0.1:3211
 ```
 
+#### Environment variable reference
+
+There are **two separate places** where env vars are set, and they serve different purposes:
+
+| Variable | `.env.local` (SvelteKit) | Convex Dashboard / CLI | Notes |
+|----------|:---:|:---:|-------|
+| `LOGTO_ENDPOINT` | Yes | Yes | SvelteKit uses it for the OAuth flow. Convex uses it for the JWT `issuer` claim match. Always `http://localhost:3001` locally, `https://auth.yourdomain.com` in prod. |
+| `LOGTO_APP_ID` | Yes | — | Only used by SvelteKit's `@logto/sveltekit` hook |
+| `LOGTO_APP_SECRET` | Yes | — | Only used by SvelteKit server-side |
+| `LOGTO_COOKIE_ENCRYPTION_KEY` | Yes | — | Only used by SvelteKit server-side |
+| `LOGTO_API_IDENTIFIER` | Yes | Yes | SvelteKit uses it to request scoped access tokens. Convex uses it as the `applicationID` to match JWT audience. |
+| `PUBLIC_LOGTO_API_IDENTIFIER` | Yes | — | Public mirror for client-side code if needed |
+| `LOGTO_JWKS_URL` | — | Yes (local dev only) | **Local dev only.** The URL Convex uses to fetch Logto's signing keys. See [Docker networking note](#docker-networking-local-dev-only) below. Not needed in production. |
+| `PUBLIC_CONVEX_URL` | Yes | — | The Convex backend URL the browser connects to |
+| `CONVEX_SELF_HOSTED_URL` | Yes | — | Used by `npx convex` CLI commands |
+| `CONVEX_SELF_HOSTED_ADMIN_KEY` | Yes | — | Used by `npx convex` CLI commands |
+| `PUBLIC_CONVEX_SITE_URL` | Yes | — | Convex dashboard/HTTP actions URL |
+
 Set the Logto config as Convex environment variables via CLI:
 
 ```bash
-npx convex env set LOGTO_ENDPOINT http://localhost:3001 --url http://127.0.0.1:3210 --admin-key <your-admin-key>
-npx convex env set LOGTO_API_IDENTIFIER https://honu-log-api.dev --url http://127.0.0.1:3210 --admin-key <your-admin-key>
+npx convex env set LOGTO_ENDPOINT http://localhost:3001
+npx convex env set LOGTO_API_IDENTIFIER https://honu-log-api.dev
+# Local dev only — see Docker networking note below:
+npx convex env set LOGTO_JWKS_URL http://host.docker.internal:3001/oidc/jwks
 ```
+
+#### Docker networking (local dev only)
+
+> **Critical gotcha for self-hosted Convex:** The Convex backend runs inside a Docker container. When `auth.config.ts` references `http://localhost:3001/oidc/jwks`, `localhost` inside Docker means "this container" — not your Mac where Logto actually runs. The JWKS fetch silently fails, and Convex can't verify any JWT. This manifests as `ctx.auth.getUserIdentity()` always returning `null` with no visible error.
+>
+> **The fix:** Use `host.docker.internal` — a special Docker DNS name that resolves to the host machine. Set `LOGTO_JWKS_URL=http://host.docker.internal:3001/oidc/jwks` as a Convex env var, and reference it separately in `auth.config.ts`.
+>
+> **This is a local dev issue only.** In production, both Logto and Convex have real hostnames (e.g., `https://auth.yourdomain.com`) that are mutually reachable. No `host.docker.internal` needed — a single `LOGTO_ENDPOINT` works for both `issuer` and `jwks`.
+>
+> You can verify reachability from the Convex container:
+> ```bash
+> docker exec <convex-container-name> sh -c "curl -s http://host.docker.internal:3001/oidc/jwks"
+> ```
 
 ---
 
@@ -269,10 +302,13 @@ export default {
 			type: 'customJwt',
 			// The API Identifier from your Logto API Resource
 			applicationID: process.env.LOGTO_API_IDENTIFIER!,
-			// Logto OIDC issuer endpoint
+			// Must match the `iss` claim in the JWT (what Logto stamps into the token)
 			issuer: process.env.LOGTO_ENDPOINT + '/oidc',
-			// Logto JWKS endpoint for token verification
-			jwks: process.env.LOGTO_ENDPOINT + '/oidc/jwks',
+			// JWKS URL reachable from the Convex backend (Docker container)
+			// In local dev, uses LOGTO_JWKS_URL (host.docker.internal) because
+			// localhost inside Docker != your host machine.
+			// In production, just use LOGTO_ENDPOINT + '/oidc/jwks' directly.
+			jwks: process.env.LOGTO_JWKS_URL!,
 			// Must match Logto's signing algorithm (RSA)
 			algorithm: 'RS256'
 		}
@@ -280,12 +316,16 @@ export default {
 };
 ```
 
-Set the environment variables via Convex CLI (self-hosted):
+Set the environment variables via Convex CLI:
 
 ```bash
-npx convex env set LOGTO_ENDPOINT http://localhost:3001 --url http://127.0.0.1:3210 --admin-key <your-admin-key>
-npx convex env set LOGTO_API_IDENTIFIER https://honu-log-api.dev --url http://127.0.0.1:3210 --admin-key <your-admin-key>
+npx convex env set LOGTO_ENDPOINT http://localhost:3001
+npx convex env set LOGTO_API_IDENTIFIER https://honu-log-api.dev
+# Local dev only — Convex runs in Docker, so localhost doesn't reach your host:
+npx convex env set LOGTO_JWKS_URL http://host.docker.internal:3001/oidc/jwks
 ```
+
+> **Production:** Set `LOGTO_JWKS_URL` to `https://auth.yourdomain.com/oidc/jwks` — or refactor `auth.config.ts` to use `process.env.LOGTO_ENDPOINT + '/oidc/jwks'` since there's no Docker networking issue in production.
 
 > **What you get in Convex functions:** After auth is configured, `ctx.auth.getUserIdentity()` returns:
 > ```json
@@ -338,7 +378,11 @@ const logtoHook = handleLogto(
 	{
 		endpoint: env.LOGTO_ENDPOINT,
 		appId: env.LOGTO_APP_ID,
-		appSecret: env.LOGTO_APP_SECRET
+		appSecret: env.LOGTO_APP_SECRET,
+		// Request access tokens scoped to the Convex API Resource.
+		// Without this, getAccessToken('https://honu-log-api.dev') fails with
+		// "resource indicator is missing, or unknown".
+		resources: [env.LOGTO_API_IDENTIFIER!]
 	},
 	{ encryptionKey: env.LOGTO_COOKIE_ENCRYPTION_KEY }
 );
@@ -347,6 +391,8 @@ export const handle = sequence(logtoHook);
 ```
 
 This provides `locals.logtoClient` and `locals.user` on every server request. No client-side Logto SDK is needed.
+
+> **Important:** The `resources` array tells Logto to include the API Resource in the OAuth grant. Without it, the session won't have access to the resource, and `getAccessToken()` will fail. If you add `resources` after users have already signed in, they must **sign out and sign back in** to get a new session with the resource scope.
 
 ### 3.4.1 Server endpoint for Convex access tokens
 
@@ -435,21 +481,20 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 
 ```svelte
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 </script>
 
+<h1>Flight Logbook</h1>
+
 {#if data.user}
-	<h1>Flight Logbook</h1>
-	<p>Welcome back!</p>
-	<a href="/app/flights">Go to Logbook</a>
+	<p><a href={resolve('/app/flights')}>Go to Logbook</a></p>
 	<form method="POST" action="?/signOut">
 		<button type="submit">Sign Out</button>
 	</form>
 {:else}
-	<h1>Flight Logbook</h1>
-	<p>Sign in to start logging flights.</p>
 	<form method="POST" action="?/signIn">
 		<button type="submit">Sign In</button>
 	</form>
@@ -465,31 +510,30 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 Wire up the Convex client with Logto token fetching via the server endpoint:
 
 ```svelte
-<script>
-	import { PUBLIC_CONVEX_URL } from '$env/static/public';
-	import { setupConvex } from 'convex-svelte';
+<script lang="ts">
 	import favicon from '$lib/assets/favicon.svg';
+	import { page } from '$app/state';
+	import { setupConvex, useConvexClient } from 'convex-svelte';
+	import { PUBLIC_CONVEX_URL } from '$env/static/public';
 
-	const { children } = $props();
+	let { children } = $props();
 
-	// Fetch access token from server endpoint for Convex auth
-	async function fetchAccessToken({ forceRefreshToken }: { forceRefreshToken: boolean }) {
-		try {
-			const res = await fetch('/api/convex-token');
-			if (!res.ok) return null;
-			const { token } = await res.json();
-			return token;
-		} catch {
-			return null;
-		}
+	setupConvex(PUBLIC_CONVEX_URL);
+	const client = useConvexClient();
+
+	async function fetchToken() {
+		const res = await fetch('/api/convex-token');
+		if (!res.ok) return null;
+		const data = await res.json();
+		return data.token;
 	}
 
-	// setupConvex with auth token provider
-	// Check convex-svelte docs for the auth integration API —
-	// the key requirement is providing a fetchAccessToken callback
-	// that returns the Logto access token string.
-	setupConvex(PUBLIC_CONVEX_URL, {
-		fetchAccessToken
+	// Only set auth when user is logged in to avoid 401 noise in console
+	let hasUser = $derived(!!page.data.user);
+	$effect(() => {
+		if (hasUser) {
+			client.setAuth(fetchToken);
+		}
 	});
 </script>
 
@@ -497,7 +541,7 @@ Wire up the Convex client with Logto token fetching via the server endpoint:
 {@render children()}
 ```
 
-> **Implementation note:** The `fetchAccessToken` callback calls our server endpoint (`/api/convex-token`), which uses the Logto session cookie to obtain a fresh access token. The exact `setupConvex` auth API may differ — check `convex-svelte` docs at implementation time. The token is an access token scoped to the Logto API Resource (NOT the ID token).
+> **Implementation note:** `setupConvex` does NOT accept a `fetchAccessToken` option — confirmed by reading `convex-svelte` source. You must call `client.setAuth(fetchToken)` separately on the `ConvexClient` instance. The `$effect` is appropriate here because `setAuth` is an imperative call to an external library triggered by reactive auth state. The `fetchToken` callback returns `null` when not authenticated, which is what the Convex `setAuth` API expects.
 
 ---
 
@@ -995,98 +1039,81 @@ src/routes/
   +layout.svelte            ← Root layout (Convex provider) — done in step 3
   callback/
     +page.svelte            ← Logto callback — done in step 3
-  (app)/                    ← Authenticated route group (SSR DISABLED)
-    +layout.ts              ← ssr = false
-    +layout.svelte          ← Auth gate + collection init
+  app/                      ← Authenticated routes (SSR DISABLED)
+    +layout.ts              ← ssr = false + auth gate + localStorage caching
+    +layout.svelte          ← Nav + children rendering
     flights/
       +page.svelte          ← Flight list & entry (step 8)
     aircraft/
       +page.svelte          ← Aircraft management (step 8)
 ```
 
-### 7.1 App layout — SSR disabled
+> **Why `app/` and not `(app)/`?** SvelteKit route groups with parentheses (e.g., `(app)`) strip the group name from the URL — so `(app)/flights` becomes `/flights`. We want the URL to be `/app/flights`, so we use a regular `app/` directory.
 
-#### `src/routes/(app)/+layout.ts`
+### 7.1 App layout — SSR disabled + auth gate
+
+#### `src/routes/app/+layout.ts`
 
 ```typescript
+import { redirect } from '@sveltejs/kit';
+import type { LayoutLoad } from './$types';
+
 export const ssr = false;
+
+const CACHED_USER_KEY = 'honu_cached_user';
+
+export const load: LayoutLoad = async ({ parent }) => {
+	const { user } = await parent();
+
+	if (user) {
+		localStorage.setItem(CACHED_USER_KEY, JSON.stringify(user));
+		return { user };
+	}
+
+	// Offline fallback: check localStorage
+	const stored = localStorage.getItem(CACHED_USER_KEY);
+	if (stored) {
+		try {
+			return { user: JSON.parse(stored) };
+		} catch {
+			// fall through to redirect
+		}
+	}
+
+	redirect(302, '/');
+};
 ```
 
 > **Why `ssr = false`?** Replicate uses WASM SQLite via OPFS which only runs in the browser. Disabling SSR for the authenticated routes ensures the entire app shell is client-rendered, which also enables offline hard-refresh (the service worker serves the cached shell).
 
-### 7.2 App layout — auth gate + collection init
+> **Why the auth gate is in `+layout.ts` and not `$effect`?** SvelteKit `load` functions are the idiomatic place for data fetching, guards, and redirects. Using `$effect` + `goto()` for redirects is a React pattern — Svelte 5 docs explicitly warn against updating state in effects. The `load` function runs before the component renders, so there's no flash of unauthenticated content.
 
-#### `src/routes/(app)/+layout.svelte`
+### 7.2 App layout — rendering
+
+#### `src/routes/app/+layout.svelte`
 
 ```svelte
-<script>
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
-	import { aircraftTypes } from '$lib/collections/aircraft_types';
-	import { aircraft } from '$lib/collections/aircraft';
-	import { airports } from '$lib/collections/airports';
-	import { flights } from '$lib/collections/flights';
+<script lang="ts">
+	import { resolve } from '$app/paths';
 
-	const { children } = $props();
-	let ready = $state(false);
-	let user = $state<{ sub: string; name?: string; email?: string } | null>(null);
-
-	onMount(async () => {
-		// Get user from server-provided layout data
-		const serverUser = $page.data.user;
-
-		if (serverUser) {
-			// Online: use server-provided user data and cache it
-			user = { sub: serverUser.sub, name: serverUser.name, email: serverUser.email };
-			localStorage.setItem('honu-user', JSON.stringify(user));
-		} else {
-			// Try cached user for offline resilience
-			const cached = localStorage.getItem('honu-user');
-			if (cached) {
-				user = JSON.parse(cached);
-			} else {
-				goto('/');
-				return;
-			}
-		}
-
-		// Initialize Replicate collections
-		try {
-			await Promise.all([
-				aircraftTypes.init(),
-				aircraft.init(),
-				airports.init(),
-				flights.init()
-			]);
-		} catch (err) {
-			console.error('Collection init failed (may be offline):', err);
-			// Still show UI — collections may have cached data
-		}
-
-		ready = true;
-	});
+	let { children } = $props();
 </script>
 
-{#if !ready}
-	<p>Loading...</p>
-{:else if !user}
-	<p>Please <a href="/">sign in</a> to continue.</p>
-{:else}
-	<nav>
-		<a href="/app/flights">Flights</a>
-		<a href="/app/aircraft">Aircraft</a>
-	</nav>
-	{@render children()}
-{/if}
+<nav>
+	<a href={resolve('/app/flights')}>Flights</a>
+	<a href={resolve('/app/aircraft')}>Aircraft</a>
+</nav>
+{@render children()}
 ```
+
+> **Note:** Use `resolve()` from `$app/paths` for href links — the `svelte/no-navigation-without-resolve` eslint rule enforces this so base paths are handled correctly.
 
 ### Key design decisions
 
+- Auth gate is in the `load` function, not a Svelte `$effect` — idiomatic SvelteKit pattern
 - Auth state comes from server-provided `$page.data.user` (via `+layout.server.ts` at the root), NOT a client-side Logto SDK
 - `localStorage` cache provides offline resilience — if the server can't be reached, the cached user keeps the UI functional
-- `Promise.all` initializes all 4 collections in parallel
-- Error handling on init allows the app to work with previously cached data when offline
+- Replicate collection init will be added here once collections are built (future step)
 
 ---
 
@@ -1331,25 +1358,47 @@ npx convex deploy --url https://convex.yourdomain.com --admin-key <your-prod-adm
 
 ### 11.3 Set Convex production environment variables
 
+In production, both Logto and Convex have real hostnames — no Docker networking issues. You only need two env vars on the Convex side (no `LOGTO_JWKS_URL` needed):
+
 ```bash
 npx convex env set LOGTO_ENDPOINT https://auth.yourdomain.com --url https://convex.yourdomain.com --admin-key <your-prod-admin-key>
 npx convex env set LOGTO_API_IDENTIFIER https://honu-log-api.dev --url https://convex.yourdomain.com --admin-key <your-prod-admin-key>
+npx convex env set LOGTO_JWKS_URL https://auth.yourdomain.com/oidc/jwks --url https://convex.yourdomain.com --admin-key <your-prod-admin-key>
 ```
+
+> **Note:** In production, `LOGTO_JWKS_URL` is simply `LOGTO_ENDPOINT + '/oidc/jwks'`. The separate env var exists because in local dev, the Convex Docker container can't reach `localhost` (see [Docker networking note](#docker-networking-local-dev-only)). You could refactor `auth.config.ts` to fall back to `LOGTO_ENDPOINT + '/oidc/jwks'` when `LOGTO_JWKS_URL` is not set, but keeping it explicit is clearer.
 
 ### 11.4 Set SvelteKit environment variables in Coolify
 
+These go in your Coolify app's environment settings (or a `.env` file on the server):
+
 ```bash
-PUBLIC_CONVEX_URL=https://convex.yourdomain.com
-CONVEX_SELF_HOSTED_URL=https://convex.yourdomain.com
-CONVEX_SELF_HOSTED_ADMIN_KEY=<your-prod-admin-key>
-PUBLIC_CONVEX_SITE_URL=https://convex-site.yourdomain.com
+# SvelteKit server-side (Logto OAuth flow)
 LOGTO_ENDPOINT=https://auth.yourdomain.com
 LOGTO_APP_ID=your-prod-app-id
 LOGTO_APP_SECRET=your-prod-app-secret
 LOGTO_COOKIE_ENCRYPTION_KEY=<random-32-char-string>
 LOGTO_API_IDENTIFIER=https://honu-log-api.dev
+
+# Public (exposed to browser)
+PUBLIC_CONVEX_URL=https://convex.yourdomain.com
 PUBLIC_LOGTO_API_IDENTIFIER=https://honu-log-api.dev
+PUBLIC_CONVEX_SITE_URL=https://convex-site.yourdomain.com
+
+# Convex CLI (only needed if deploying from this server)
+CONVEX_SELF_HOSTED_URL=https://convex.yourdomain.com
+CONVEX_SELF_HOSTED_ADMIN_KEY=<your-prod-admin-key>
 ```
+
+#### Local dev vs production env var summary
+
+| Where | Local Dev | Production |
+|-------|-----------|------------|
+| **`.env.local`** (SvelteKit) | `LOGTO_ENDPOINT=http://localhost:3001` | `LOGTO_ENDPOINT=https://auth.yourdomain.com` |
+| **`.env.local`** (SvelteKit) | `PUBLIC_CONVEX_URL=http://127.0.0.1:3210` | `PUBLIC_CONVEX_URL=https://convex.yourdomain.com` |
+| **Convex env** (`npx convex env set`) | `LOGTO_ENDPOINT=http://localhost:3001` | `LOGTO_ENDPOINT=https://auth.yourdomain.com` |
+| **Convex env** | `LOGTO_API_IDENTIFIER=https://honu-log-api.dev` | `LOGTO_API_IDENTIFIER=https://honu-log-api.dev` (same) |
+| **Convex env** | `LOGTO_JWKS_URL=http://host.docker.internal:3001/oidc/jwks` | `LOGTO_JWKS_URL=https://auth.yourdomain.com/oidc/jwks` |
 
 ### 11.5 Deploy SvelteKit to Coolify
 
@@ -1368,7 +1417,9 @@ Push to main — Coolify auto-deploys.
 - Decode the JWT at jwt.io — verify `iss` matches your `auth.config.ts` `issuer` exactly and `aud` matches `applicationID`
 - Logto's OIDC issuer URL is typically `https://your-logto-domain/oidc` (note the `/oidc` suffix)
 - The `applicationID` must be the **API Resource identifier** (e.g., `https://honu-log-api.dev`), NOT the Logto App ID
-- Check that the JWKS endpoint is reachable from the self-hosted Convex instance: `{issuer}/jwks` (since both run locally, ensure Docker networking allows Convex to reach Logto)
+- **Docker networking:** The self-hosted Convex backend runs in Docker. `localhost` inside the container doesn't reach your host machine where Logto runs. Use `host.docker.internal` for the JWKS URL in local dev. See [Docker networking note](#docker-networking-local-dev-only).
+- Verify JWKS reachability from the Convex container: `docker exec <container> sh -c "curl -s http://host.docker.internal:3001/oidc/jwks"`
+- The `issuer` in `auth.config.ts` must match the JWT's `iss` claim exactly (e.g., `http://localhost:3001/oidc`), but the `jwks` URL must be reachable from the Convex backend (e.g., `http://host.docker.internal:3001/oidc/jwks`)
 
 ### Replicate collections fail to initialize
 
