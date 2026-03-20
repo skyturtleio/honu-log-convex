@@ -15,24 +15,26 @@
 This guide is designed for **one step (or a few sub-steps) per AI session**. Each step has a **Context** block at the top so a fresh session can orient itself without reading the entire guide.
 
 **Starting a session:**
+
 > "Read @IMPLEMENTATION_GUIDE_CONVEX.md. We are going to implement step 4 in this session."
 
 **Ending a session:** After the code looks good:
+
 > "Update the implementation guide to mark step 4 as complete, note anything that deviated from the plan, and commit."
 
 ---
 
 ## Session Map
 
-| Session | Steps | What gets built | Status |
-|---------|-------|-----------------|--------|
-| 1 | 1–3 | Environment, deps, Auth (Logto + Convex OIDC) | |
-| 2 | 4 | Convex schema | |
-| 3 | 5–6 | Replicate server functions + client collections | |
-| 4 | 7 | App layout + offline auth resilience | |
-| 5 | 8 | Flight logbook UI | |
-| 6 | 9 | PWA (service worker + manifest) | |
-| 7 | 10–11 | Testing + deploy prep | |
+| Session | Steps | What gets built                                 | Status |
+| ------- | ----- | ----------------------------------------------- | ------ |
+| 1       | 1–3   | Environment, deps, Auth (Logto + Convex OIDC)   |        |
+| 2       | 4     | Convex schema                                   |        |
+| 3       | 5–6   | Replicate server functions + client collections |        |
+| 4       | 7     | App layout + offline auth resilience            |        |
+| 5       | 8     | Flight logbook UI                               |        |
+| 6       | 9     | PWA (service worker + manifest)                 |        |
+| 7       | 10–11 | Testing + deploy prep                           |        |
 
 ---
 
@@ -153,7 +155,7 @@ SvelteKit doesn't like referencing code outside `src/`. Create `convex.json` in 
 
 ```json
 {
-  "functions": "src/convex/"
+	"functions": "src/convex/"
 }
 ```
 
@@ -164,6 +166,7 @@ npx convex dev --url http://127.0.0.1:3210 --admin-key <your-admin-key>
 ```
 
 This will:
+
 - Connect to your self-hosted Convex instance
 - Deploy your schema and functions
 - Start watching for changes and pushing to the self-hosted backend
@@ -200,19 +203,19 @@ PUBLIC_CONVEX_SITE_URL=http://127.0.0.1:3211
 
 There are **two separate places** where env vars are set, and they serve different purposes:
 
-| Variable | `.env.local` (SvelteKit) | Convex Dashboard / CLI | Notes |
-|----------|:---:|:---:|-------|
-| `LOGTO_ENDPOINT` | Yes | Yes | SvelteKit uses it for the OAuth flow. Convex uses it for the JWT `issuer` claim match. Always `http://localhost:3001` locally, `https://auth.yourdomain.com` in prod. |
-| `LOGTO_APP_ID` | Yes | — | Only used by SvelteKit's `@logto/sveltekit` hook |
-| `LOGTO_APP_SECRET` | Yes | — | Only used by SvelteKit server-side |
-| `LOGTO_COOKIE_ENCRYPTION_KEY` | Yes | — | Only used by SvelteKit server-side |
-| `LOGTO_API_IDENTIFIER` | Yes | Yes | SvelteKit uses it to request scoped access tokens. Convex uses it as the `applicationID` to match JWT audience. |
-| `PUBLIC_LOGTO_API_IDENTIFIER` | Yes | — | Public mirror for client-side code if needed |
-| `LOGTO_JWKS_URL` | — | Yes (local dev only) | **Local dev only.** Override for the JWKS URL so Convex's Docker container can reach Logto. `auth.config.ts` falls back to `LOGTO_ENDPOINT + '/oidc/jwks'` when unset, so this is not needed in production. |
-| `PUBLIC_CONVEX_URL` | Yes | — | The Convex backend URL the browser connects to |
-| `CONVEX_SELF_HOSTED_URL` | Yes | — | Used by `npx convex` CLI commands |
-| `CONVEX_SELF_HOSTED_ADMIN_KEY` | Yes | — | Used by `npx convex` CLI commands |
-| `PUBLIC_CONVEX_SITE_URL` | Yes | — | Convex dashboard/HTTP actions URL |
+| Variable                       | `.env.local` (SvelteKit) | Convex Dashboard / CLI | Notes                                                                                                                                                                                                       |
+| ------------------------------ | :----------------------: | :--------------------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LOGTO_ENDPOINT`               |           Yes            |          Yes           | SvelteKit uses it for the OAuth flow. Convex uses it for the JWT `issuer` claim match. Always `http://localhost:3001` locally, `https://auth.yourdomain.com` in prod.                                       |
+| `LOGTO_APP_ID`                 |           Yes            |           —            | Only used by SvelteKit's `@logto/sveltekit` hook                                                                                                                                                            |
+| `LOGTO_APP_SECRET`             |           Yes            |           —            | Only used by SvelteKit server-side                                                                                                                                                                          |
+| `LOGTO_COOKIE_ENCRYPTION_KEY`  |           Yes            |           —            | Only used by SvelteKit server-side                                                                                                                                                                          |
+| `LOGTO_API_IDENTIFIER`         |           Yes            |          Yes           | SvelteKit uses it to request scoped access tokens. Convex uses it as the `applicationID` to match JWT audience.                                                                                             |
+| `PUBLIC_LOGTO_API_IDENTIFIER`  |           Yes            |           —            | Public mirror for client-side code if needed                                                                                                                                                                |
+| `LOGTO_JWKS_URL`               |            —             |  Yes (local dev only)  | **Local dev only.** Override for the JWKS URL so Convex's Docker container can reach Logto. `auth.config.ts` falls back to `LOGTO_ENDPOINT + '/oidc/jwks'` when unset, so this is not needed in production. |
+| `PUBLIC_CONVEX_URL`            |           Yes            |           —            | The Convex backend URL the browser connects to                                                                                                                                                              |
+| `CONVEX_SELF_HOSTED_URL`       |           Yes            |           —            | Used by `npx convex` CLI commands                                                                                                                                                                           |
+| `CONVEX_SELF_HOSTED_ADMIN_KEY` |           Yes            |           —            | Used by `npx convex` CLI commands                                                                                                                                                                           |
+| `PUBLIC_CONVEX_SITE_URL`       |           Yes            |           —            | Convex dashboard/HTTP actions URL                                                                                                                                                                           |
 
 Set the Logto config as Convex environment variables via CLI:
 
@@ -232,6 +235,7 @@ npx convex env set LOGTO_JWKS_URL http://host.docker.internal:3001/oidc/jwks
 > **This is a local dev issue only.** In production, both Logto and Convex have real hostnames (e.g., `https://auth.yourdomain.com`) that are mutually reachable. No `host.docker.internal` needed — a single `LOGTO_ENDPOINT` works for both `issuer` and `jwks`.
 >
 > You can verify reachability from the Convex container:
+>
 > ```bash
 > docker exec <convex-container-name> sh -c "curl -s http://host.docker.internal:3001/oidc/jwks"
 > ```
@@ -300,8 +304,7 @@ const getCustomJwtClaims = async ({ token, context, environmentVariables, api })
 // reach the host machine. LOGTO_JWKS_URL (set to host.docker.internal) overrides
 // the JWKS endpoint so the container can fetch Logto's signing keys.
 // In production, LOGTO_JWKS_URL is unset and we derive it from LOGTO_ENDPOINT.
-const jwks =
-	process.env.LOGTO_JWKS_URL || process.env.LOGTO_ENDPOINT + '/oidc/jwks';
+const jwks = process.env.LOGTO_JWKS_URL || process.env.LOGTO_ENDPOINT + '/oidc/jwks';
 
 export default {
 	providers: [
@@ -329,17 +332,19 @@ npx convex env set LOGTO_JWKS_URL http://host.docker.internal:3001/oidc/jwks
 > **Production:** Don't set `LOGTO_JWKS_URL`. The config falls back to `LOGTO_ENDPOINT + '/oidc/jwks'` automatically, which works when both services have real hostnames.
 
 > **What you get in Convex functions:** After auth is configured, `ctx.auth.getUserIdentity()` returns:
+>
 > ```json
 > {
->   "tokenIdentifier": "https://...",
->   "issuer": "https://your-logto/oidc",
->   "subject": "user-uuid",
->   "client_id": "your-app-id",
->   "email": "pilot@example.com",
->   "scope": "your:permissions",
->   "username": "callsign"
+> 	"tokenIdentifier": "https://...",
+> 	"issuer": "https://your-logto/oidc",
+> 	"subject": "user-uuid",
+> 	"client_id": "your-app-id",
+> 	"email": "pilot@example.com",
+> 	"scope": "your:permissions",
+> 	"username": "callsign"
 > }
 > ```
+>
 > The `subject` field is the user's Logto `sub` — use this as `user_id` throughout.
 
 > **Verify with jwt.io:** After getting an access token from Logto, decode it and confirm `iss` matches your issuer URL and `aud` matches your `applicationID`. Mismatches are the #1 cause of auth failures.
@@ -589,6 +594,7 @@ Landings and approaches are embedded arrays in the flight document because:
 OOOI times (Out, Off, On, In) are stored as **ISO 8601 UTC strings** (`v.string()`), following Convex's recommendation to store calendar dates and clock times as strings. Example: `"2024-03-15T23:50:00Z"`.
 
 **Why ISO 8601 strings:**
+
 - Human-readable in the Convex dashboard, logs, and JSON exports
 - Lexicographically sortable and indexable
 - Duration math is easy via the Temporal API: `Temporal.Instant.from(timeIn).since(Temporal.Instant.from(timeOut))`
@@ -597,6 +603,7 @@ OOOI times (Out, Off, On, In) are stored as **ISO 8601 UTC strings** (`v.string(
 **`flight_date` stays as a string** (`"2024-03-15"`) — it's a calendar concept (the date the trip started), not a point in time.
 
 **UI input flow:**
+
 1. User picks a flight date: `2024-03-15`
 2. User enters OUT: `2350` → stored as `"2024-03-15T23:50:00Z"`
 3. User enters OFF: `0010` → numerically less than `2350`, so next day → `"2024-03-16T00:10:00Z"`
@@ -734,8 +741,7 @@ export const flightSchema = schema.define({
 			)
 		)
 	}),
-	indexes: (t) =>
-		t.index('by_user', ['user_id']).index('by_user_date', ['user_id', 'flight_date']),
+	indexes: (t) => t.index('by_user', ['user_id']).index('by_user_date', ['user_id', 'flight_date']),
 	defaults: {
 		pic: 0,
 		sic: 0,
@@ -803,6 +809,7 @@ export default app;
 ### What Replicate needs on the server
 
 For each collection, `collection.create()` generates 5 Convex functions:
+
 - `material` — paginated query for SSR seeding
 - `delta` — real-time CRDT subscription
 - `replicate` — unified insert/update/delete mutation
@@ -819,10 +826,11 @@ import { components } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
 import { aircraftTypeSchema } from './schema/aircraft_type';
 
-export const { material, delta, replicate, presence, session } =
-	collection.create<Doc<'aircraft_type'>>(components.replicate, 'aircraft_type', {
-		schema: aircraftTypeSchema
-	});
+export const { material, delta, replicate, presence, session } = collection.create<
+	Doc<'aircraft_type'>
+>(components.replicate, 'aircraft_type', {
+	schema: aircraftTypeSchema
+});
 ```
 
 #### `src/convex/aircraft.ts`
@@ -833,10 +841,13 @@ import { components } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
 import { aircraftSchema } from './schema/aircraft';
 
-export const { material, delta, replicate, presence, session } =
-	collection.create<Doc<'aircraft'>>(components.replicate, 'aircraft', {
+export const { material, delta, replicate, presence, session } = collection.create<Doc<'aircraft'>>(
+	components.replicate,
+	'aircraft',
+	{
 		schema: aircraftSchema
-	});
+	}
+);
 ```
 
 #### `src/convex/airports.ts`
@@ -847,10 +858,13 @@ import { components } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
 import { airportSchema } from './schema/airports';
 
-export const { material, delta, replicate, presence, session } =
-	collection.create<Doc<'airports'>>(components.replicate, 'airports', {
+export const { material, delta, replicate, presence, session } = collection.create<Doc<'airports'>>(
+	components.replicate,
+	'airports',
+	{
 		schema: airportSchema
-	});
+	}
+);
 ```
 
 #### `src/convex/flights.ts`
@@ -861,10 +875,13 @@ import { components } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
 import { flightSchema } from './schema/flights';
 
-export const { material, delta, replicate, presence, session } =
-	collection.create<Doc<'flights'>>(components.replicate, 'flights', {
+export const { material, delta, replicate, presence, session } = collection.create<Doc<'flights'>>(
+	components.replicate,
+	'flights',
+	{
 		schema: flightSchema
-	});
+	}
+);
 ```
 
 ### 5.2 Access control
@@ -872,6 +889,7 @@ export const { material, delta, replicate, presence, session } =
 Replicate's `collection.create()` handles the CRUD operations. To enforce that users can only access their own data, you need to add authorization logic. Check the Replicate docs for the authorization hook API — it likely supports an `authorize` callback or similar mechanism in `collection.create()` options.
 
 The authorization should:
+
 - On insert: verify the `user_id` field matches the authenticated user's `sub` claim
 - On update/delete: verify the document belongs to the authenticated user
 - On read (material/delta): filter to only return documents where `user_id` matches
@@ -894,9 +912,7 @@ import { persistence } from '@trestleinc/replicate/client';
 export const sqlite = persistence.web.sqlite.once({
 	name: 'honu-log',
 	worker: async () => {
-		const { default: SqliteWorker } = await import(
-			'@trestleinc/replicate/worker?worker'
-		);
+		const { default: SqliteWorker } = await import('@trestleinc/replicate/worker?worker');
 		return new SqliteWorker();
 	}
 });
@@ -1203,6 +1219,7 @@ Build a minimal flight log page:
 2. **Set up a reactive query** — use the collection's query API to get flights sorted by date
 3. **Build a simple form** with: date, departure airport, arrival airport, aircraft, OOOI times (4-digit Zulu input fields), total time (minutes), landings
 4. **On submit:** Parse OOOI inputs via `resolveOoiTime()` (from `$lib/utils/time`), compute block time if all 4 OOOI times are present, then call `collection.insert()`:
+
    ```typescript
    const timeOut = resolveOoiTime(flightDate, outInput, null);
    const timeOff = resolveOoiTime(flightDate, offInput, timeOut);
@@ -1210,18 +1227,19 @@ Build a minimal flight log page:
    const timeIn = resolveOoiTime(flightDate, inInput, timeOn);
 
    flights.get().insert({
-       id: crypto.randomUUID(),
-       user_id: user.sub,
-       flight_date: '2024-03-15',
-       time_out: timeOut,
-       time_off: timeOff,
-       time_on: timeOn,
-       time_in: timeIn,
-       total_time: timeOut && timeIn ? durationMinutes(timeOut, timeIn) : 138,
-       landings: [{ landing_type: 'day', count: 1 }],
-       // ... other fields
+   	id: crypto.randomUUID(),
+   	user_id: user.sub,
+   	flight_date: '2024-03-15',
+   	time_out: timeOut,
+   	time_off: timeOff,
+   	time_on: timeOn,
+   	time_in: timeIn,
+   	total_time: timeOut && timeIn ? durationMinutes(timeOut, timeIn) : 138,
+   	landings: [{ landing_type: 'day', count: 1 }]
+   	// ... other fields
    });
    ```
+
 5. **Display flights** in a table with date, from, to, total time (formatted), and a delete button
 6. **Delete** calls `collection.delete(id)` — landings/approaches are embedded, so they're deleted with the flight automatically
 
@@ -1272,8 +1290,7 @@ Create `static/manifest.json`:
 Add to the `<head>` section of `src/app.html`:
 
 ```html
-<link rel="manifest" href="/manifest.json" />
-<meta name="theme-color" content="#1a1a2e" />
+<link rel="manifest" href="/manifest.json" /> <meta name="theme-color" content="#1a1a2e" />
 ```
 
 ### 9.3 Service worker
@@ -1330,10 +1347,12 @@ bun run dev
 8. **Test hard refresh offline:** Offline → Ctrl+Shift+R. App loads. Flights show.
 
 > **The service worker only works in production builds:**
+>
 > ```bash
 > bun run build
 > bun run preview
 > ```
+>
 > Test offline in the preview server. The dev server does NOT register the service worker.
 
 ---
@@ -1391,13 +1410,13 @@ CONVEX_SELF_HOSTED_ADMIN_KEY=<your-prod-admin-key>
 
 #### Local dev vs production env var summary
 
-| Where | Local Dev | Production |
-|-------|-----------|------------|
-| **`.env.local`** (SvelteKit) | `LOGTO_ENDPOINT=http://localhost:3001` | `LOGTO_ENDPOINT=https://auth.yourdomain.com` |
-| **`.env.local`** (SvelteKit) | `PUBLIC_CONVEX_URL=http://127.0.0.1:3210` | `PUBLIC_CONVEX_URL=https://convex.yourdomain.com` |
-| **Convex env** (`npx convex env set`) | `LOGTO_ENDPOINT=http://localhost:3001` | `LOGTO_ENDPOINT=https://auth.yourdomain.com` |
-| **Convex env** | `LOGTO_API_IDENTIFIER=https://honu-log-api.dev` | `LOGTO_API_IDENTIFIER=https://honu-log-api.dev` (same) |
-| **Convex env** | `LOGTO_JWKS_URL=http://host.docker.internal:3001/oidc/jwks` | *(not set — derived from LOGTO_ENDPOINT)* |
+| Where                                 | Local Dev                                                   | Production                                             |
+| ------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------ |
+| **`.env.local`** (SvelteKit)          | `LOGTO_ENDPOINT=http://localhost:3001`                      | `LOGTO_ENDPOINT=https://auth.yourdomain.com`           |
+| **`.env.local`** (SvelteKit)          | `PUBLIC_CONVEX_URL=http://127.0.0.1:3210`                   | `PUBLIC_CONVEX_URL=https://convex.yourdomain.com`      |
+| **Convex env** (`npx convex env set`) | `LOGTO_ENDPOINT=http://localhost:3001`                      | `LOGTO_ENDPOINT=https://auth.yourdomain.com`           |
+| **Convex env**                        | `LOGTO_API_IDENTIFIER=https://honu-log-api.dev`             | `LOGTO_API_IDENTIFIER=https://honu-log-api.dev` (same) |
+| **Convex env**                        | `LOGTO_JWKS_URL=http://host.docker.internal:3001/oidc/jwks` | _(not set — derived from LOGTO_ENDPOINT)_              |
 
 ### 11.5 Deploy SvelteKit to Coolify
 
@@ -1433,7 +1452,7 @@ Push to main — Coolify auto-deploys.
   ```typescript
   // vite.config.ts
   optimizeDeps: {
-      exclude: ['@trestleinc/replicate']
+  	exclude: ['@trestleinc/replicate'];
   }
   ```
 - Check Replicate docs for current Vite configuration requirements
@@ -1456,4 +1475,3 @@ Push to main — Coolify auto-deploys.
 - The `@logto/sveltekit` server-side SDK handles token refresh automatically using the refresh token stored in the encrypted session cookie.
 - The client fetches fresh tokens via `/api/convex-token` — the server transparently refreshes if needed.
 - If the session cookie expires or the refresh token is revoked, the user will need to sign in again. The cached user in `localStorage` keeps the UI working, but Convex sync won't resume until re-authenticated.
-

@@ -5,5 +5,10 @@ yarn.lock
 bun.lock
 bun.lockb
 
+# Convex
+src/convex/_generated/
+src/convex/README.md
+src/convex/tsconfig.json
+
 # Miscellaneous
 /static/
