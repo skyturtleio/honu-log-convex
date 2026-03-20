@@ -1,226 +1,208 @@
 [
-  {
-    "description": "Update IMPLEMENTATION_GUIDE_CONVEX.md to use @logto/sveltekit",
-    "acceptanceCriteria": [
-      "No references to @logto/browser or getLogtoClient() remain in the guide",
-      "Logto app type changed from 'Single Page Application' to 'Traditional Web Application' in sections 1, 11",
-      "Section 2.2 dependencies show @logto/sveltekit instead of @logto/browser",
-      "Section 2.5 env vars use server-side LOGTO_ENDPOINT, LOGTO_APP_ID, LOGTO_APP_SECRET, LOGTO_COOKIE_ENCRYPTION_KEY instead of PUBLIC_LOGTO_* (except PUBLIC_LOGTO_API_IDENTIFIER kept for Convex audience)",
-      "Section 3 auth architecture updated to show server-side OAuth flow via hooks.server.ts",
-      "Section 3.4 replaces client-side LogtoClient singleton with description of existing hooks.server.ts + server endpoint for access tokens",
-      "Section 3.5 callback route updated to use server-handled callback via @logto/sveltekit",
-      "Section 3.6 landing page uses server-side form actions (matching existing implementation)",
-      "Section 3.7 layout gets auth token from server data for Convex",
-      "New subsection added explaining how to get Logto access token server-side and pass to client for Convex WebSocket auth",
-      "Section 7.2 auth gate uses server-provided user data",
-      "Appendix updated to reference server-side token refresh"
-    ],
-    "passes": false
-  },
-  {
-    "description": "Replicate schema definitions for all 4 tables",
-    "acceptanceCriteria": [
-      "src/convex/schema/aircraft_type.ts exists with aircraftTypeSchema using @trestleinc/replicate/server schema.define()",
-      "src/convex/schema/aircraft.ts exists with aircraftSchema",
-      "src/convex/schema/airports.ts exists with airportSchema",
-      "src/convex/schema/flights.ts exists with flightSchema including embedded landings/approaches arrays",
-      "All schemas define shape, indexes, and defaults as specified in the implementation guide",
-      "npx convex dev accepts the schema files without errors"
-    ],
-    "passes": false
-  },
-  {
-    "description": "Wire up Convex schema.ts and convex.config.ts",
-    "acceptanceCriteria": [
-      "src/convex/schema.ts imports all 4 schemas and exports defineSchema() with all 4 tables",
-      "src/convex/convex.config.ts registers the Replicate component via defineApp()",
-      "npx convex dev deploys the schema successfully"
-    ],
-    "passes": false
-  },
-  {
-    "description": "Convex auth.config.ts for customJwt",
-    "acceptanceCriteria": [
-      "src/convex/auth.config.ts exists with customJwt provider configuration",
-      "Uses process.env.LOGTO_ENDPOINT and process.env.LOGTO_API_IDENTIFIER",
-      "Specifies RS256 algorithm",
-      "issuer is set to LOGTO_ENDPOINT + '/oidc'",
-      "jwks is set to LOGTO_ENDPOINT + '/oidc/jwks'",
-      "applicationID uses LOGTO_API_IDENTIFIER"
-    ],
-    "passes": true
-  },
-  {
-    "description": "Server-side auth helper",
-    "acceptanceCriteria": [
-      "src/convex/model/auth.ts exists",
-      "Exports getAuthUser() that calls ctx.auth.getUserIdentity() and throws if not authenticated",
-      "Exports getUserId() that returns identity.subject (Logto sub claim)",
-      "Both functions accept QueryCtx | MutationCtx parameter"
-    ],
-    "passes": true
-  },
-  {
-    "description": "OOOI time parsing and duration utilities with tests",
-    "acceptanceCriteria": [
-      "src/lib/utils/time.ts exports parseZuluInput, resolveOoiTime, isoToZulu, durationMinutes, minutesToDecimal, minutesToHMM",
-      "parseZuluInput('2350') returns { hours: 23, minutes: 50 }",
-      "parseZuluInput('2500') returns null (invalid)",
-      "resolveOoiTime handles midnight rollover correctly (e.g. OUT=2350, OFF=0010 rolls to next day)",
-      "durationMinutes computes correct integer minutes between two ISO strings",
-      "src/lib/utils/time.spec.ts exists with tests covering normal input, midnight rollover, invalid input, and duration math",
-      "bun run test passes all time utility tests"
-    ],
-    "passes": false
-  },
-  {
-    "description": "Replicate server functions for all 4 tables",
-    "acceptanceCriteria": [
-      "src/convex/aircraft_types.ts exports { material, delta, replicate, presence, session } via collection.create()",
-      "src/convex/aircraft.ts exports the same 5 functions",
-      "src/convex/airports.ts exports the same 5 functions",
-      "src/convex/flights.ts exports the same 5 functions",
-      "Each file imports the correct schema and uses components.replicate",
-      "npx convex dev deploys all functions successfully"
-    ],
-    "passes": false
-  },
-  {
-    "description": "Replicate SQLite persistence and shared Convex client",
-    "acceptanceCriteria": [
-      "src/lib/replicate/persistence.ts exports a SQLite persistence singleton using @trestleinc/replicate/client",
-      "src/lib/replicate/convex-client.ts exports getConvexClient() returning a ConvexClient singleton",
-      "ConvexClient uses PUBLIC_CONVEX_URL from $env/static/public",
-      "Both modules are importable without errors"
-    ],
-    "passes": false
-  },
-  {
-    "description": "Replicate client collections for all 4 tables",
-    "acceptanceCriteria": [
-      "src/lib/collections/aircraft_types.ts creates and exports a client collection with schema, persistence, and Convex client",
-      "src/lib/collections/aircraft.ts does the same",
-      "src/lib/collections/airports.ts does the same",
-      "src/lib/collections/flights.ts does the same",
-      "Each collection references the correct schema, SQLite persistence, and shared Convex client",
-      "TypeScript compiles without type errors"
-    ],
-    "passes": false
-  },
-  {
-    "description": "Pass Logto access token to client for Convex auth",
-    "acceptanceCriteria": [
-      "A server-side mechanism exists to obtain a Logto access token scoped to the Convex API resource (PUBLIC_LOGTO_API_IDENTIFIER)",
-      "The access token is available to client-side code for passing to the Convex WebSocket",
-      "The token flow works with the existing @logto/sveltekit hooks.server.ts setup",
-      "The approach follows the customJwt pattern from https://github.com/get-convex/convex-backend/issues/75#issuecomment-2918783173"
-    ],
-    "passes": true
-  },
-  {
-    "description": "Wire root layout with Convex provider",
-    "acceptanceCriteria": [
-      "src/routes/+layout.svelte calls setupConvex() from convex-svelte with PUBLIC_CONVEX_URL",
-      "Auth token fetching from Logto is wired into the Convex provider",
-      "The Convex client authenticates using the Logto access token",
-      "Existing favicon and children rendering preserved"
-    ],
-    "passes": true
-  },
-  {
-    "description": "Logto OAuth callback route",
-    "acceptanceCriteria": [
-      "src/routes/callback/+page.svelte exists and handles the OAuth redirect",
-      "The callback works with @logto/sveltekit server-side flow (not client-side @logto/browser)",
-      "After successful callback, user is redirected to /app/flights",
-      "Loading state is shown during callback processing"
-    ],
-    "passes": true
-  },
-  {
-    "description": "Update landing page for authenticated state",
-    "acceptanceCriteria": [
-      "src/routes/+page.svelte shows sign-in button when not authenticated",
-      "Shows sign-out button and link to /app/flights when authenticated",
-      "Uses server-provided user data (not client-side Logto SDK)",
-      "Sign in/out uses form actions (existing pattern preserved)"
-    ],
-    "passes": true
-  },
-  {
-    "description": "App route group with auth gate and collection init",
-    "acceptanceCriteria": [
-      "src/routes/(app)/+layout.ts exists with ssr = false",
-      "src/routes/(app)/+layout.svelte exists with auth gate",
-      "Auth gate uses server-provided user data when online",
-      "Offline resilience via cached user in localStorage",
-      "All 4 Replicate collections initialized via Promise.all on mount",
-      "Shows loading state during init, redirects unauthenticated users to /"
-    ],
-    "passes": true
-  },
-  {
-    "description": "Flights list page",
-    "acceptanceCriteria": [
-      "src/routes/(app)/flights/+page.svelte exists",
-      "Displays flights from Replicate collection sorted by date descending",
-      "Each flight shows date, departure, arrival, and total time",
-      "Delete button removes a flight via collection.delete()",
-      "Empty state shown when no flights exist"
-    ],
-    "passes": false
-  },
-  {
-    "description": "Flight entry form with OOOI time inputs",
-    "acceptanceCriteria": [
-      "Flight entry form exists on the flights page with fields: date, departure airport, arrival airport, aircraft, 4 OOOI time inputs (HHMM format), remarks",
-      "OOOI times parsed via resolveOoiTime() with automatic midnight rollover",
-      "total_time computed from time_out and time_in when all 4 OOOI times present",
-      "Submitting calls collection.insert() with crypto.randomUUID() as id",
-      "Form clears after successful submission"
-    ],
-    "passes": false
-  },
-  {
-    "description": "Aircraft management page",
-    "acceptanceCriteria": [
-      "src/routes/(app)/aircraft/+page.svelte exists",
-      "Displays list of user's aircraft with tail number and type",
-      "Form to add new aircraft with tail number and aircraft type selection",
-      "Form to add new aircraft types with type code, category, and class",
-      "Uses Replicate collections for offline-capable CRUD"
-    ],
-    "passes": false
-  },
-  {
-    "description": "PWA web app manifest",
-    "acceptanceCriteria": [
-      "static/manifest.json exists with name, short_name, start_url, display, icons",
-      "src/app.html includes <link rel='manifest' href='/manifest.json'>",
-      "src/app.html includes <meta name='theme-color'> tag"
-    ],
-    "passes": false
-  },
-  {
-    "description": "Service worker for offline app shell",
-    "acceptanceCriteria": [
-      "src/service-worker.ts exists",
-      "Caches static assets and build output on install",
-      "Cleans old caches on activate",
-      "Cache-first for static assets, network-first for navigation",
-      "Skips Convex WebSocket traffic (*.convex.cloud)",
-      "Skips Logto auth endpoints",
-      "App shell loads on hard refresh while offline (after initial cache)"
-    ],
-    "passes": false
-  },
-  {
-    "description": "Vite config for Replicate WASM/worker compatibility",
-    "acceptanceCriteria": [
-      "vite.config.ts includes optimizeDeps.exclude for @trestleinc/replicate (or equivalent config from current Replicate docs)",
-      "Replicate WASM worker loads without errors in dev mode",
-      "bun run dev starts without Vite bundling errors related to Replicate"
-    ],
-    "passes": false
-  }
+	{
+		"description": "Replicate schema definitions for all 4 tables",
+		"acceptanceCriteria": [
+			"src/convex/schema/aircraft_type.ts exists with aircraftTypeSchema using @trestleinc/replicate/server schema.define()",
+			"src/convex/schema/aircraft.ts exists with aircraftSchema",
+			"src/convex/schema/airports.ts exists with airportSchema",
+			"src/convex/schema/flights.ts exists with flightSchema including embedded landings/approaches arrays",
+			"All schemas define shape, indexes, and defaults as specified in the implementation guide",
+			"npx convex dev accepts the schema files without errors"
+		],
+		"passes": false
+	},
+	{
+		"description": "Wire up Convex schema.ts and convex.config.ts",
+		"acceptanceCriteria": [
+			"src/convex/schema.ts imports all 4 schemas and exports defineSchema() with all 4 tables",
+			"src/convex/convex.config.ts registers the Replicate component via defineApp()",
+			"npx convex dev deploys the schema successfully"
+		],
+		"passes": false
+	},
+	{
+		"description": "Convex auth.config.ts for customJwt",
+		"acceptanceCriteria": [
+			"src/convex/auth.config.ts exists with customJwt provider configuration",
+			"Uses process.env.LOGTO_ENDPOINT and process.env.LOGTO_API_IDENTIFIER",
+			"Specifies RS256 algorithm",
+			"issuer is set to LOGTO_ENDPOINT + '/oidc'",
+			"jwks is set to LOGTO_ENDPOINT + '/oidc/jwks'",
+			"applicationID uses LOGTO_API_IDENTIFIER"
+		],
+		"passes": true
+	},
+	{
+		"description": "Server-side auth helper",
+		"acceptanceCriteria": [
+			"src/convex/model/auth.ts exists",
+			"Exports getAuthUser() that calls ctx.auth.getUserIdentity() and throws if not authenticated",
+			"Exports getUserId() that returns identity.subject (Logto sub claim)",
+			"Both functions accept QueryCtx | MutationCtx parameter"
+		],
+		"passes": true
+	},
+	{
+		"description": "OOOI time parsing and duration utilities with tests",
+		"acceptanceCriteria": [
+			"src/lib/utils/time.ts exports parseZuluInput, resolveOoiTime, isoToZulu, durationMinutes, minutesToDecimal, minutesToHMM",
+			"parseZuluInput('2350') returns { hours: 23, minutes: 50 }",
+			"parseZuluInput('2500') returns null (invalid)",
+			"resolveOoiTime handles midnight rollover correctly (e.g. OUT=2350, OFF=0010 rolls to next day)",
+			"durationMinutes computes correct integer minutes between two ISO strings",
+			"src/lib/utils/time.spec.ts exists with tests covering normal input, midnight rollover, invalid input, and duration math",
+			"bun run test passes all time utility tests"
+		],
+		"passes": false
+	},
+	{
+		"description": "Replicate server functions for all 4 tables",
+		"acceptanceCriteria": [
+			"src/convex/aircraft_types.ts exports { material, delta, replicate, presence, session } via collection.create()",
+			"src/convex/aircraft.ts exports the same 5 functions",
+			"src/convex/airports.ts exports the same 5 functions",
+			"src/convex/flights.ts exports the same 5 functions",
+			"Each file imports the correct schema and uses components.replicate",
+			"npx convex dev deploys all functions successfully"
+		],
+		"passes": false
+	},
+	{
+		"description": "Replicate SQLite persistence and shared Convex client",
+		"acceptanceCriteria": [
+			"src/lib/replicate/persistence.ts exports a SQLite persistence singleton using @trestleinc/replicate/client",
+			"src/lib/replicate/convex-client.ts exports getConvexClient() returning a ConvexClient singleton",
+			"ConvexClient uses PUBLIC_CONVEX_URL from $env/static/public",
+			"Both modules are importable without errors"
+		],
+		"passes": false
+	},
+	{
+		"description": "Replicate client collections for all 4 tables",
+		"acceptanceCriteria": [
+			"src/lib/collections/aircraft_types.ts creates and exports a client collection with schema, persistence, and Convex client",
+			"src/lib/collections/aircraft.ts does the same",
+			"src/lib/collections/airports.ts does the same",
+			"src/lib/collections/flights.ts does the same",
+			"Each collection references the correct schema, SQLite persistence, and shared Convex client",
+			"TypeScript compiles without type errors"
+		],
+		"passes": false
+	},
+	{
+		"description": "Pass Logto access token to client for Convex auth",
+		"acceptanceCriteria": [
+			"A server-side mechanism exists to obtain a Logto access token scoped to the Convex API resource (PUBLIC_LOGTO_API_IDENTIFIER)",
+			"The access token is available to client-side code for passing to the Convex WebSocket",
+			"The token flow works with the existing @logto/sveltekit hooks.server.ts setup",
+			"The approach follows the customJwt pattern from https://github.com/get-convex/convex-backend/issues/75#issuecomment-2918783173"
+		],
+		"passes": true
+	},
+	{
+		"description": "Wire root layout with Convex provider",
+		"acceptanceCriteria": [
+			"src/routes/+layout.svelte calls setupConvex() from convex-svelte with PUBLIC_CONVEX_URL",
+			"Auth token fetching from Logto is wired into the Convex provider",
+			"The Convex client authenticates using the Logto access token",
+			"Existing favicon and children rendering preserved"
+		],
+		"passes": true
+	},
+	{
+		"description": "Logto OAuth callback route",
+		"acceptanceCriteria": [
+			"src/routes/callback/+page.svelte exists and handles the OAuth redirect",
+			"The callback works with @logto/sveltekit server-side flow (not client-side @logto/browser)",
+			"After successful callback, user is redirected to /app/flights",
+			"Loading state is shown during callback processing"
+		],
+		"passes": true
+	},
+	{
+		"description": "Update landing page for authenticated state",
+		"acceptanceCriteria": [
+			"src/routes/+page.svelte shows sign-in button when not authenticated",
+			"Shows sign-out button and link to /app/flights when authenticated",
+			"Uses server-provided user data (not client-side Logto SDK)",
+			"Sign in/out uses form actions (existing pattern preserved)"
+		],
+		"passes": true
+	},
+	{
+		"description": "App route group with auth gate and collection init",
+		"acceptanceCriteria": [
+			"src/routes/(app)/+layout.ts exists with ssr = false",
+			"src/routes/(app)/+layout.svelte exists with auth gate",
+			"Auth gate uses server-provided user data when online",
+			"Offline resilience via cached user in localStorage",
+			"All 4 Replicate collections initialized via Promise.all on mount",
+			"Shows loading state during init, redirects unauthenticated users to /"
+		],
+		"passes": true
+	},
+	{
+		"description": "Flights list page",
+		"acceptanceCriteria": [
+			"src/routes/(app)/flights/+page.svelte exists",
+			"Displays flights from Replicate collection sorted by date descending",
+			"Each flight shows date, departure, arrival, and total time",
+			"Delete button removes a flight via collection.delete()",
+			"Empty state shown when no flights exist"
+		],
+		"passes": false
+	},
+	{
+		"description": "Flight entry form with OOOI time inputs",
+		"acceptanceCriteria": [
+			"Flight entry form exists on the flights page with fields: date, departure airport, arrival airport, aircraft, 4 OOOI time inputs (HHMM format), remarks",
+			"OOOI times parsed via resolveOoiTime() with automatic midnight rollover",
+			"total_time computed from time_out and time_in when all 4 OOOI times present",
+			"Submitting calls collection.insert() with crypto.randomUUID() as id",
+			"Form clears after successful submission"
+		],
+		"passes": false
+	},
+	{
+		"description": "Aircraft management page",
+		"acceptanceCriteria": [
+			"src/routes/(app)/aircraft/+page.svelte exists",
+			"Displays list of user's aircraft with tail number and type",
+			"Form to add new aircraft with tail number and aircraft type selection",
+			"Form to add new aircraft types with type code, category, and class",
+			"Uses Replicate collections for offline-capable CRUD"
+		],
+		"passes": false
+	},
+	{
+		"description": "PWA web app manifest",
+		"acceptanceCriteria": [
+			"static/manifest.json exists with name, short_name, start_url, display, icons",
+			"src/app.html includes <link rel='manifest' href='/manifest.json'>",
+			"src/app.html includes <meta name='theme-color'> tag"
+		],
+		"passes": false
+	},
+	{
+		"description": "Service worker for offline app shell",
+		"acceptanceCriteria": [
+			"src/service-worker.ts exists",
+			"Caches static assets and build output on install",
+			"Cleans old caches on activate",
+			"Cache-first for static assets, network-first for navigation",
+			"Skips Convex WebSocket traffic (*.convex.cloud)",
+			"Skips Logto auth endpoints",
+			"App shell loads on hard refresh while offline (after initial cache)"
+		],
+		"passes": false
+	},
+	{
+		"description": "Vite config for Replicate WASM/worker compatibility",
+		"acceptanceCriteria": [
+			"vite.config.ts includes optimizeDeps.exclude for @trestleinc/replicate (or equivalent config from current Replicate docs)",
+			"Replicate WASM worker loads without errors in dev mode",
+			"bun run dev starts without Vite bundling errors related to Replicate"
+		],
+		"passes": false
+	}
 ]
