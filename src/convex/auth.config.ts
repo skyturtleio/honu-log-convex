@@ -1,15 +1,18 @@
+// In local dev, self-hosted Convex runs in Docker where `localhost` doesn't
+// reach the host machine. LOGTO_JWKS_URL (set to host.docker.internal) overrides
+// the JWKS endpoint so the container can fetch Logto's signing keys.
+// In production, LOGTO_JWKS_URL is unset and we derive it from LOGTO_ENDPOINT.
+const jwks =
+	process.env.LOGTO_JWKS_URL || process.env.LOGTO_ENDPOINT + '/oidc/jwks';
+
 export default {
 	providers: [
 		{
 			type: 'customJwt',
-			// The API Identifier from your Logto API Resource
 			applicationID: process.env.LOGTO_API_IDENTIFIER!,
-			// Must match the `iss` claim in the JWT (what Logto puts in the token)
+			// Must match the `iss` claim in the JWT
 			issuer: process.env.LOGTO_ENDPOINT + '/oidc',
-			// JWKS URL reachable from the Convex backend (Docker container)
-			// Uses LOGTO_JWKS_URL to handle Docker networking (host.docker.internal)
-			jwks: process.env.LOGTO_JWKS_URL!,
-			// Must match Logto's signing algorithm (RSA)
+			jwks,
 			algorithm: 'RS256'
 		}
 	]

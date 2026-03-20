@@ -208,7 +208,7 @@ There are **two separate places** where env vars are set, and they serve differe
 | `LOGTO_COOKIE_ENCRYPTION_KEY` | Yes | — | Only used by SvelteKit server-side |
 | `LOGTO_API_IDENTIFIER` | Yes | Yes | SvelteKit uses it to request scoped access tokens. Convex uses it as the `applicationID` to match JWT audience. |
 | `PUBLIC_LOGTO_API_IDENTIFIER` | Yes | — | Public mirror for client-side code if needed |
-| `LOGTO_JWKS_URL` | — | Yes (local dev only) | **Local dev only.** The URL Convex uses to fetch Logto's signing keys. See [Docker networking note](#docker-networking-local-dev-only) below. Not needed in production. |
+| `LOGTO_JWKS_URL` | — | Yes (local dev only) | **Local dev only.** Override for the JWKS URL so Convex's Docker container can reach Logto. `auth.config.ts` falls back to `LOGTO_ENDPOINT + '/oidc/jwks'` when unset, so this is not needed in production. |
 | `PUBLIC_CONVEX_URL` | Yes | — | The Convex backend URL the browser connects to |
 | `CONVEX_SELF_HOSTED_URL` | Yes | — | Used by `npx convex` CLI commands |
 | `CONVEX_SELF_HOSTED_ADMIN_KEY` | Yes | — | Used by `npx convex` CLI commands |
@@ -296,20 +296,21 @@ const getCustomJwtClaims = async ({ token, context, environmentVariables, api })
 #### `src/convex/auth.config.ts`
 
 ```typescript
+// In local dev, self-hosted Convex runs in Docker where `localhost` doesn't
+// reach the host machine. LOGTO_JWKS_URL (set to host.docker.internal) overrides
+// the JWKS endpoint so the container can fetch Logto's signing keys.
+// In production, LOGTO_JWKS_URL is unset and we derive it from LOGTO_ENDPOINT.
+const jwks =
+	process.env.LOGTO_JWKS_URL || process.env.LOGTO_ENDPOINT + '/oidc/jwks';
+
 export default {
 	providers: [
 		{
 			type: 'customJwt',
-			// The API Identifier from your Logto API Resource
 			applicationID: process.env.LOGTO_API_IDENTIFIER!,
-			// Must match the `iss` claim in the JWT (what Logto stamps into the token)
+			// Must match the `iss` claim in the JWT
 			issuer: process.env.LOGTO_ENDPOINT + '/oidc',
-			// JWKS URL reachable from the Convex backend (Docker container)
-			// In local dev, uses LOGTO_JWKS_URL (host.docker.internal) because
-			// localhost inside Docker != your host machine.
-			// In production, just use LOGTO_ENDPOINT + '/oidc/jwks' directly.
-			jwks: process.env.LOGTO_JWKS_URL!,
-			// Must match Logto's signing algorithm (RSA)
+			jwks,
 			algorithm: 'RS256'
 		}
 	]
@@ -325,7 +326,7 @@ npx convex env set LOGTO_API_IDENTIFIER https://honu-log-api.dev
 npx convex env set LOGTO_JWKS_URL http://host.docker.internal:3001/oidc/jwks
 ```
 
-> **Production:** Set `LOGTO_JWKS_URL` to `https://auth.yourdomain.com/oidc/jwks` — or refactor `auth.config.ts` to use `process.env.LOGTO_ENDPOINT + '/oidc/jwks'` since there's no Docker networking issue in production.
+> **Production:** Don't set `LOGTO_JWKS_URL`. The config falls back to `LOGTO_ENDPOINT + '/oidc/jwks'` automatically, which works when both services have real hostnames.
 
 > **What you get in Convex functions:** After auth is configured, `ctx.auth.getUserIdentity()` returns:
 > ```json
@@ -1358,15 +1359,13 @@ npx convex deploy --url https://convex.yourdomain.com --admin-key <your-prod-adm
 
 ### 11.3 Set Convex production environment variables
 
-In production, both Logto and Convex have real hostnames — no Docker networking issues. You only need two env vars on the Convex side (no `LOGTO_JWKS_URL` needed):
+In production, both Logto and Convex have real hostnames — no Docker networking issues. `auth.config.ts` derives the JWKS URL from `LOGTO_ENDPOINT` automatically (no `LOGTO_JWKS_URL` needed):
 
 ```bash
 npx convex env set LOGTO_ENDPOINT https://auth.yourdomain.com --url https://convex.yourdomain.com --admin-key <your-prod-admin-key>
 npx convex env set LOGTO_API_IDENTIFIER https://honu-log-api.dev --url https://convex.yourdomain.com --admin-key <your-prod-admin-key>
-npx convex env set LOGTO_JWKS_URL https://auth.yourdomain.com/oidc/jwks --url https://convex.yourdomain.com --admin-key <your-prod-admin-key>
+# No LOGTO_JWKS_URL needed — auth.config.ts falls back to LOGTO_ENDPOINT + '/oidc/jwks'
 ```
-
-> **Note:** In production, `LOGTO_JWKS_URL` is simply `LOGTO_ENDPOINT + '/oidc/jwks'`. The separate env var exists because in local dev, the Convex Docker container can't reach `localhost` (see [Docker networking note](#docker-networking-local-dev-only)). You could refactor `auth.config.ts` to fall back to `LOGTO_ENDPOINT + '/oidc/jwks'` when `LOGTO_JWKS_URL` is not set, but keeping it explicit is clearer.
 
 ### 11.4 Set SvelteKit environment variables in Coolify
 
@@ -1398,7 +1397,7 @@ CONVEX_SELF_HOSTED_ADMIN_KEY=<your-prod-admin-key>
 | **`.env.local`** (SvelteKit) | `PUBLIC_CONVEX_URL=http://127.0.0.1:3210` | `PUBLIC_CONVEX_URL=https://convex.yourdomain.com` |
 | **Convex env** (`npx convex env set`) | `LOGTO_ENDPOINT=http://localhost:3001` | `LOGTO_ENDPOINT=https://auth.yourdomain.com` |
 | **Convex env** | `LOGTO_API_IDENTIFIER=https://honu-log-api.dev` | `LOGTO_API_IDENTIFIER=https://honu-log-api.dev` (same) |
-| **Convex env** | `LOGTO_JWKS_URL=http://host.docker.internal:3001/oidc/jwks` | `LOGTO_JWKS_URL=https://auth.yourdomain.com/oidc/jwks` |
+| **Convex env** | `LOGTO_JWKS_URL=http://host.docker.internal:3001/oidc/jwks` | *(not set — derived from LOGTO_ENDPOINT)* |
 
 ### 11.5 Deploy SvelteKit to Coolify
 
