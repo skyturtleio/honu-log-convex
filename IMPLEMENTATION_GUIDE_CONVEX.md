@@ -104,16 +104,16 @@ This guide is designed for **one step (or a few sub-steps) per AI session**. Eac
 
 ### Set up Logto locally (if not already running)
 
-Run Logto in Docker on port 3001. Create a **Single Page Application** (not Traditional Web — since the app routes are CSR):
+Run Logto in Docker on port 3001. Create a **Traditional Web Application** (server-side auth via `@logto/sveltekit`):
 
 1. Open Logto Console at `http://localhost:3001`
-2. Create a new **Single Page Application**
+2. Create a new **Traditional Web Application**
 3. Set redirect URI to `http://localhost:5173/callback`
 4. Set post sign-out redirect URI to `http://localhost:5173/`
-5. Copy the App ID (you'll need it later)
+5. Copy the App ID and App Secret (you'll need both)
 6. **Create an API Resource** with identifier matching your Convex deployment URL (you'll get this in step 2)
 
-> **Note:** We use a Single Page Application type instead of Traditional Web because the authenticated app routes run with `ssr = false`. The Logto browser SDK handles the redirect flow client-side.
+> **Note:** We use a Traditional Web Application type because `@logto/sveltekit` handles the OAuth flow server-side via `hooks.server.ts`. The server manages sessions, token exchange, and token refresh. You'll also need a `LOGTO_COOKIE_ENCRYPTION_KEY` for encrypting the session cookie.
 
 ---
 
@@ -138,8 +138,8 @@ bun add convex convex-svelte
 # Replicate (offline sync + TanStack DB collections)
 bun add @trestleinc/replicate
 
-# Logto browser SDK (client-side auth)
-bun add @logto/browser
+# Logto SvelteKit SDK (server-side auth)
+bun add @logto/sveltekit
 ```
 
 > **Note:** Replicate bundles TanStack DB internally — no separate `@tanstack/*` packages needed.
@@ -176,9 +176,13 @@ Your `.env.local` (created by `npx convex dev`, already in `.gitignore`):
 # Convex (auto-generated)
 PUBLIC_CONVEX_URL=https://your-project-123.convex.cloud
 
-# Logto (local Docker)
-PUBLIC_LOGTO_ENDPOINT=http://localhost:3001
-PUBLIC_LOGTO_APP_ID=<your-logto-spa-app-id>
+# Logto (server-side — used by @logto/sveltekit hooks.server.ts)
+LOGTO_ENDPOINT=http://localhost:3001
+LOGTO_APP_ID=<your-logto-app-id>
+LOGTO_APP_SECRET=<your-logto-app-secret>
+LOGTO_COOKIE_ENCRYPTION_KEY=<random-32-char-string>
+
+# Logto API Resource identifier (needed client-side for Convex audience)
 PUBLIC_LOGTO_API_IDENTIFIER=https://honu-log-api.dev
 ```
 
@@ -198,20 +202,30 @@ npx convex env set LOGTO_API_IDENTIFIER https://honu-log-api.dev
 ### Architecture
 
 ```
-Browser                          Logto                    Convex
-  │                                │                        │
-  │──── redirect to /authorize ───>│                        │
-  │<─── redirect with auth code ───│                        │
-  │──── exchange for access token ─>│                        │
-  │<─── access token (JWT) ────────│                        │
-  │                                                         │
-  │──── WebSocket + access token ──────────────────────────>│
-  │                                                         │── verify JWT
-  │                                                         │   via Logto JWKS
-  │<─── authenticated connection ──────────────────────────│
+Browser                     SvelteKit Server              Logto                    Convex
+  │                              │                          │                        │
+  │── form POST signIn ─────────>│                          │                        │
+  │                              │── redirect /authorize ──>│                        │
+  │<──────── 302 redirect ───────│                          │                        │
+  │── follow redirect ──────────────────────────────────────>│                        │
+  │<── redirect with auth code ──────────────────────────────│                        │
+  │── GET /callback ────────────>│                          │                        │
+  │                              │── exchange code for tokens>│                       │
+  │                              │<── access + refresh token ─│                       │
+  │                              │  (stored in encrypted cookie)                      │
+  │<── set-cookie + redirect ────│                          │                        │
+  │                              │                          │                        │
+  │── GET /api/convex-token ────>│                          │                        │
+  │                              │── refresh if needed ────>│                        │
+  │<── access token (JSON) ──────│                          │                        │
+  │                                                                                  │
+  │── WebSocket + access token ─────────────────────────────────────────────────────>│
+  │                                                                                  │── verify JWT
+  │                                                                                  │   via Logto JWKS
+  │<── authenticated connection ─────────────────────────────────────────────────────│
 ```
 
-The Logto browser SDK handles the OAuth redirect flow. An **access token** (not ID token) is passed to the Convex client. Convex verifies it via Logto's JWKS endpoint using the `customJwt` provider type.
+The `@logto/sveltekit` SDK handles the OAuth flow server-side via `hooks.server.ts`. The server manages sessions in encrypted cookies. To authenticate the Convex WebSocket, the client fetches an **access token** (not ID token) from a server endpoint, which the server obtains from the Logto session. Convex verifies it via Logto's JWKS endpoint using the `customJwt` provider type.
 
 > **Proven working:** This configuration comes from [a confirmed working setup](https://github.com/get-convex/convex-backend/issues/75#issuecomment-2918783173) of SvelteKit + Logto + Convex. The key insight is using `customJwt` with Logto's access token (not the standard OIDC ID token flow), which also gives you Logto's scopes/permissions in Convex functions.
 
@@ -219,10 +233,11 @@ The Logto browser SDK handles the OAuth redirect flow. An **access token** (not 
 
 In Logto Console:
 
-1. **Use RSA algorithm for private keys** — for self-hosted Logto, check your private key config and restart the Docker service after changing
-2. **Create an API Resource** with an identifier like `https://honu-log-api.dev` (this becomes the `applicationID` in Convex and the `audience` when requesting tokens)
-3. **Create permissions (scopes)** and user roles if needed (optional for MVP — useful later for admin features)
-4. **(Optional) Customize access token claims** — add user email/name so Convex functions can access them without a separate lookup. In Logto Console → JWT Customization:
+1. **Create a Traditional Web Application** — not SPA. `@logto/sveltekit` handles auth server-side.
+2. **Use RSA algorithm for private keys** — for self-hosted Logto, check your private key config and restart the Docker service after changing
+3. **Create an API Resource** with an identifier like `https://honu-log-api.dev` (this becomes the `applicationID` in Convex and the `audience` when requesting tokens)
+4. **Create permissions (scopes)** and user roles if needed (optional for MVP — useful later for admin features)
+5. **(Optional) Customize access token claims** — add user email/name so Convex functions can access them without a separate lookup. In Logto Console → JWT Customization:
 
 ```javascript
 const getCustomJwtClaims = async ({ token, context, environmentVariables, api }) => {
@@ -299,127 +314,180 @@ export async function getUserId(ctx: QueryCtx | MutationCtx) {
 }
 ```
 
-### 3.4 Logto client-side integration
+### 3.4 Server-side auth via hooks.server.ts (already implemented)
 
-#### `src/lib/auth.ts`
+Auth is handled entirely server-side by `@logto/sveltekit`. The existing `src/hooks.server.ts` initializes the Logto middleware:
 
 ```typescript
-import LogtoClient from '@logto/browser';
-import {
-	PUBLIC_LOGTO_ENDPOINT,
-	PUBLIC_LOGTO_APP_ID,
-	PUBLIC_LOGTO_API_IDENTIFIER
-} from '$env/static/public';
+// src/hooks.server.ts (ALREADY EXISTS — do not recreate)
+import { handleLogto } from '@logto/sveltekit';
+import { sequence } from '@sveltejs/kit/hooks';
+import { env } from '$env/dynamic/private';
 
-let client: LogtoClient | null = null;
+const logtoHook = handleLogto(
+	{
+		endpoint: env.LOGTO_ENDPOINT,
+		appId: env.LOGTO_APP_ID,
+		appSecret: env.LOGTO_APP_SECRET
+	},
+	{ encryptionKey: env.LOGTO_COOKIE_ENCRYPTION_KEY }
+);
 
-export function getLogtoClient() {
-	if (!client) {
-		client = new LogtoClient({
-			endpoint: PUBLIC_LOGTO_ENDPOINT,
-			appId: PUBLIC_LOGTO_APP_ID,
-			// Request access tokens scoped to the Convex API resource
-			resources: [PUBLIC_LOGTO_API_IDENTIFIER]
-		});
-	}
-	return client;
-}
-
-// Fetch access token for Convex (not ID token)
-export async function getConvexToken() {
-	const logto = getLogtoClient();
-	return logto.getAccessToken(PUBLIC_LOGTO_API_IDENTIFIER);
-}
+export const handle = sequence(logtoHook);
 ```
 
+This provides `locals.logtoClient` and `locals.user` on every server request. No client-side Logto SDK is needed.
+
+### 3.4.1 Server endpoint for Convex access tokens
+
+The Convex WebSocket needs a Logto **access token** scoped to the API Resource. Create a server endpoint that the client calls to fetch this token:
+
+#### `src/routes/api/convex-token/+server.ts`
+
+```typescript
+import { json, error } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+
+export const GET: RequestHandler = async ({ locals }) => {
+	const logtoClient = locals.logtoClient;
+
+	// Get access token scoped to the Convex API Resource
+	// The resource identifier must match LOGTO_API_IDENTIFIER in Convex env
+	try {
+		const token = await logtoClient.getAccessToken('https://honu-log-api.dev');
+		if (!token) throw error(401, 'No access token available');
+		return json({ token });
+	} catch (err) {
+		throw error(401, 'Not authenticated or token expired');
+	}
+};
+```
+
+> **Key insight:** The client calls `fetch('/api/convex-token')` to get a fresh access token whenever the Convex client needs to authenticate. The server uses the Logto session cookie to obtain/refresh the token transparently.
+
 ### 3.5 Callback route
+
+The `@logto/sveltekit` SDK handles the OAuth callback server-side automatically via the hooks middleware. You just need a simple page at the callback URL that redirects after the server processes the auth code:
+
+#### `src/routes/callback/+page.server.ts`
+
+```typescript
+import { redirect } from '@sveltejs/kit';
+import type { PageServerLoad } from './$types';
+
+export const load: PageServerLoad = async ({ locals }) => {
+	// The Logto hook already handled the callback by the time we get here.
+	// If authenticated, redirect to the app.
+	if (locals.user) {
+		redirect(302, '/app/flights');
+	}
+	// If not authenticated after callback, redirect to home
+	redirect(302, '/');
+};
+```
 
 #### `src/routes/callback/+page.svelte`
 
 ```svelte
-<script>
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { getLogtoClient } from '$lib/auth';
-
-	onMount(async () => {
-		const logto = getLogtoClient();
-		await logto.handleSignInCallback(window.location.href);
-		goto('/app/flights');
-	});
-</script>
-
 <p>Signing in...</p>
 ```
 
-### 3.6 Landing page
+### 3.6 Landing page (already implemented)
 
-#### `src/routes/+page.svelte`
+The landing page uses server-side form actions for sign-in/out. This is already implemented:
+
+#### `src/routes/+page.server.ts` (ALREADY EXISTS)
+
+```typescript
+import type { Actions } from './$types';
+
+export const actions: Actions = {
+	signIn: async ({ locals }) => {
+		await locals.logtoClient.signIn('http://localhost:5173/callback');
+	},
+	signOut: async ({ locals }) => {
+		await locals.logtoClient.signOut('http://localhost:5173/');
+	}
+};
+```
+
+#### `src/routes/+layout.server.ts` (ALREADY EXISTS)
+
+```typescript
+import type { LayoutServerLoad } from './$types';
+
+export const load: LayoutServerLoad = async ({ locals }) => {
+	return { user: locals.user };
+};
+```
+
+#### `src/routes/+page.svelte` (ALREADY EXISTS — update to add logbook link)
 
 ```svelte
-<script>
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { getLogtoClient } from '$lib/auth';
+<script lang="ts">
+	import type { PageProps } from './$types';
 
-	let authenticated = $state(false);
-	let loading = $state(true);
-
-	onMount(async () => {
-		const logto = getLogtoClient();
-		authenticated = await logto.isAuthenticated();
-		loading = false;
-	});
-
-	async function signIn() {
-		const logto = getLogtoClient();
-		await logto.signIn('http://localhost:5173/callback');
-	}
-
-	async function signOut() {
-		const logto = getLogtoClient();
-		await logto.signOut('http://localhost:5173/');
-	}
+	let { data }: PageProps = $props();
 </script>
 
-{#if loading}
-	<p>Loading...</p>
-{:else if authenticated}
+{#if data.user}
+	<h1>Flight Logbook</h1>
 	<p>Welcome back!</p>
 	<a href="/app/flights">Go to Logbook</a>
-	<button onclick={signOut}>Sign Out</button>
+	<form method="POST" action="?/signOut">
+		<button type="submit">Sign Out</button>
+	</form>
 {:else}
 	<h1>Flight Logbook</h1>
 	<p>Sign in to start logging flights.</p>
-	<button onclick={signIn}>Sign In</button>
+	<form method="POST" action="?/signIn">
+		<button type="submit">Sign In</button>
+	</form>
 {/if}
 ```
+
+> **No client-side auth SDK needed.** The server provides `data.user` via `+layout.server.ts`. Form actions handle sign-in/out via server-side Logto client.
 
 ### 3.7 Convex provider with auth
 
 #### `src/routes/+layout.svelte`
 
-Wire up the Convex client with Logto token fetching:
+Wire up the Convex client with Logto token fetching via the server endpoint:
 
 ```svelte
 <script>
 	import { PUBLIC_CONVEX_URL } from '$env/static/public';
 	import { setupConvex } from 'convex-svelte';
-	import { getLogtoClient } from '$lib/auth';
+	import favicon from '$lib/assets/favicon.svg';
 
 	const { children } = $props();
 
+	// Fetch access token from server endpoint for Convex auth
+	async function fetchAccessToken({ forceRefreshToken }: { forceRefreshToken: boolean }) {
+		try {
+			const res = await fetch('/api/convex-token');
+			if (!res.ok) return null;
+			const { token } = await res.json();
+			return token;
+		} catch {
+			return null;
+		}
+	}
+
 	// setupConvex with auth token provider
 	// Check convex-svelte docs for the auth integration API —
-	// you need to pass a fetchAccessToken function that returns
-	// the Logto access token for Convex to verify.
-	setupConvex(PUBLIC_CONVEX_URL);
+	// the key requirement is providing a fetchAccessToken callback
+	// that returns the Logto access token string.
+	setupConvex(PUBLIC_CONVEX_URL, {
+		fetchAccessToken
+	});
 </script>
 
+<svelte:head><link rel="icon" href={favicon} /></svelte:head>
 {@render children()}
 ```
 
-> **Implementation note:** The exact API for passing auth tokens to `convex-svelte` may differ from React's `ConvexProviderWithAuth`. Check the `convex-svelte` package docs at implementation time. The key requirement: provide a `fetchAccessToken` callback that calls `getConvexToken()` (from `$lib/auth`) and returns the access token string. This is the access token scoped to your Logto API Resource, NOT the ID token.
+> **Implementation note:** The `fetchAccessToken` callback calls our server endpoint (`/api/convex-token`), which uses the Logto session cookie to obtain a fresh access token. The exact `setupConvex` auth API may differ — check `convex-svelte` docs at implementation time. The token is an access token scoped to the Logto API Resource (NOT the ID token).
 
 ---
 
@@ -944,7 +1012,7 @@ export const ssr = false;
 <script>
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { getLogtoClient } from '$lib/auth';
+	import { page } from '$app/stores';
 	import { aircraftTypes } from '$lib/collections/aircraft_types';
 	import { aircraft } from '$lib/collections/aircraft';
 	import { airports } from '$lib/collections/airports';
@@ -955,10 +1023,14 @@ export const ssr = false;
 	let user = $state<{ sub: string; name?: string; email?: string } | null>(null);
 
 	onMount(async () => {
-		const logto = getLogtoClient();
-		const authenticated = await logto.isAuthenticated();
+		// Get user from server-provided layout data
+		const serverUser = $page.data.user;
 
-		if (!authenticated) {
+		if (serverUser) {
+			// Online: use server-provided user data and cache it
+			user = { sub: serverUser.sub, name: serverUser.name, email: serverUser.email };
+			localStorage.setItem('honu-user', JSON.stringify(user));
+		} else {
 			// Try cached user for offline resilience
 			const cached = localStorage.getItem('honu-user');
 			if (cached) {
@@ -967,11 +1039,6 @@ export const ssr = false;
 				goto('/');
 				return;
 			}
-		} else {
-			// Online: get user info and cache it
-			const claims = await logto.getIdTokenClaims();
-			user = { sub: claims.sub, name: claims.name, email: claims.email };
-			localStorage.setItem('honu-user', JSON.stringify(user));
 		}
 
 		// Initialize Replicate collections
@@ -1006,7 +1073,8 @@ export const ssr = false;
 
 ### Key design decisions
 
-- No `+layout.server.ts` needed in `(app)/` — auth state comes from the Logto browser SDK, not server locals
+- Auth state comes from server-provided `$page.data.user` (via `+layout.server.ts` at the root), NOT a client-side Logto SDK
+- `localStorage` cache provides offline resilience — if the server can't be reached, the cached user keeps the UI functional
 - `Promise.all` initializes all 4 collections in parallel
 - Error handling on init allows the app to work with previously cached data when offline
 
@@ -1243,7 +1311,7 @@ This creates a production deployment separate from your dev deployment. Note the
 
 ### 11.2 Logto on Coolify (production)
 
-1. Create a **Single Page Application** in your production Logto instance
+1. Create a **Traditional Web Application** in your production Logto instance
 2. Set redirect URIs to your production domain (`https://logbook.yourdomain.com/callback`)
 3. Set post sign-out redirect URI to `https://logbook.yourdomain.com/`
 4. Copy the App ID
@@ -1314,6 +1382,7 @@ Push to main — Coolify auto-deploys.
 ### Offline-first with Logto tokens
 
 - Logto tokens expire. When the user comes back online after being offline, the token may be expired.
-- The Logto browser SDK should handle token refresh automatically if the refresh token is still valid.
-- If refresh fails, the user will need to sign in again. The cached user in `localStorage` keeps the UI working, but Convex sync won't resume until re-authenticated.
+- The `@logto/sveltekit` server-side SDK handles token refresh automatically using the refresh token stored in the encrypted session cookie.
+- The client fetches fresh tokens via `/api/convex-token` — the server transparently refreshes if needed.
+- If the session cookie expires or the refresh token is revoked, the user will need to sign in again. The cached user in `localStorage` keeps the UI working, but Convex sync won't resume until re-authenticated.
 
