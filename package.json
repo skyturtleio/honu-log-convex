@@ -15,7 +15,8 @@
 		"test:unit": "vitest",
 		"test": "bun run test:unit --run",
 		"wt:add": "bash scripts/wt-add.sh",
-		"wt:rm": "bash scripts/wt-rm.sh"
+		"wt:rm": "bash scripts/wt-rm.sh",
+		"convex:coolify": "bash scripts/convex-coolify.sh"
 	},
 	"devDependencies": {
 		"@effect/language-service": "^0.81.0",
