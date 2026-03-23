@@ -34,7 +34,7 @@ export default defineSchema({
 	aircraft: defineTable({
 		user_id: v.string(),
 		tail_number: v.string(), // e.g. "N839DN"
-		aircraft_type_id: v.id('aircraft_types'),
+		aircraft_type_id: v.optional(v.id('aircraft_types')),
 		notes: v.optional(v.string())
 	})
 		.index('by_user', ['user_id'])

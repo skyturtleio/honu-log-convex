@@ -18,12 +18,10 @@
 	const flightId = $derived(page.params.id);
 	const flight = useQuery(api.flights.get, () => ({ id: flightId as Id<'flights'> }));
 	const aircraftList = useQuery(api.aircraft.list, {});
-	const aircraftTypesList = useQuery(api.aircraft.listTypes, {});
 
-	async function createAircraft(tailNumber: string, aircraftTypeId: string): Promise<string> {
+	async function createAircraft(tailNumber: string): Promise<string> {
 		const id = await client.mutation(api.aircraft.create, {
-			tail_number: tailNumber,
-			aircraft_type_id: aircraftTypeId as Id<'aircraft_types'>
+			tail_number: tailNumber
 		});
 		return id;
 	}
@@ -276,7 +274,6 @@
 					<label for="aircraft-id">Aircraft</label>
 					<AircraftPicker
 						aircraftList={aircraftList.data ?? []}
-						aircraftTypesList={aircraftTypesList.data ?? []}
 						bind:value={aircraftId}
 						oncreate={createAircraft}
 					/>

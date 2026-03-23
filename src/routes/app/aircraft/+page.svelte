@@ -18,7 +18,8 @@
 
 	const typesById = $derived(new Map((aircraftTypes.data ?? []).map((t) => [t._id, t])));
 
-	function formatType(typeId: string): string {
+	function formatType(typeId: string | undefined): string {
+		if (!typeId) return '--';
 		const t = typesById.get(typeId as Id<'aircraft_types'>);
 		if (!t) return '--';
 		return `${t.designator} - ${t.make} ${t.model}`;
@@ -27,12 +28,12 @@
 	function startEdit(ac: {
 		_id: string;
 		tail_number: string;
-		aircraft_type_id: string;
+		aircraft_type_id?: string;
 		notes?: string;
 	}) {
 		editingId = ac._id;
 		editTailNumber = ac.tail_number;
-		editAircraftTypeId = ac.aircraft_type_id;
+		editAircraftTypeId = ac.aircraft_type_id ?? '';
 		editNotes = ac.notes ?? '';
 		error = '';
 	}
@@ -51,7 +52,9 @@
 			await client.mutation(api.aircraft.update, {
 				id: editingId as Id<'aircraft'>,
 				tail_number: editTailNumber,
-				aircraft_type_id: editAircraftTypeId as Id<'aircraft_types'>,
+				...(editAircraftTypeId
+					? { aircraft_type_id: editAircraftTypeId as Id<'aircraft_types'> }
+					: {}),
 				...(editNotes ? { notes: editNotes } : {})
 			});
 			editingId = null;

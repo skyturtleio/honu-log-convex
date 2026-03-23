@@ -67,7 +67,7 @@ export const get = query({
 export const create = mutation({
 	args: {
 		tail_number: v.string(),
-		aircraft_type_id: v.id('aircraft_types'),
+		aircraft_type_id: v.optional(v.id('aircraft_types')),
 		notes: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
