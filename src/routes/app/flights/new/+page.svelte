@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { flightsCollection } from '../../../../collections/useFlights';
 	import { aircraftCollection } from '../../../../collections/useAircraft';
 	import { useCollection } from '$lib/useCollection.svelte';
@@ -17,9 +18,13 @@
 	async function createAircraft(tailNumber: string): Promise<string> {
 		const now = Date.now();
 		const id = crypto.randomUUID();
-		aircraftCollection
-			.get()
-			.insert({ id, tail_number: tailNumber, createdAt: now, updatedAt: now });
+		aircraftCollection.get().insert({
+			id,
+			tail_number: tailNumber,
+			ownerId: page.data.user?.sub,
+			createdAt: now,
+			updatedAt: now
+		});
 		return id;
 	}
 
@@ -41,6 +46,10 @@
 	let totalTimeOverride = $state(false);
 	let picTimeInput = $state('');
 	let picTimeOverride = $state(false);
+	let sicTimeInput = $state('');
+	let nightTimeInput = $state('');
+	let instrumentTimeInput = $state('');
+	let crossCountryTimeInput = $state('');
 
 	let dayLandings = $state(0);
 	let nightLandings = $state(0);
@@ -104,6 +113,17 @@
 				picMinutes = totalMinutes;
 			}
 
+			const sicMinutes = sicTimeInput ? (parseDecimalHours(sicTimeInput) ?? undefined) : undefined;
+			const nightMinutes = nightTimeInput
+				? (parseDecimalHours(nightTimeInput) ?? undefined)
+				: undefined;
+			const instrumentMinutes = instrumentTimeInput
+				? (parseDecimalHours(instrumentTimeInput) ?? undefined)
+				: undefined;
+			const crossCountryMinutes = crossCountryTimeInput
+				? (parseDecimalHours(crossCountryTimeInput) ?? undefined)
+				: undefined;
+
 			const landings: Array<{ type: string; count: number }> = [];
 			if (dayLandings > 0) landings.push({ type: 'day', count: dayLandings });
 			if (nightLandings > 0) landings.push({ type: 'night', count: nightLandings });
@@ -121,6 +141,7 @@
 			const insertNow = Date.now();
 			flightsCollection.get().insert({
 				id: insertId,
+				ownerId: page.data.user?.sub,
 				flight_date: flightDate,
 				landings,
 				approaches,
@@ -136,6 +157,10 @@
 				...(resolved.time_in ? { time_in: resolved.time_in } : {}),
 				...(totalMinutes != null ? { total_time: totalMinutes } : {}),
 				...(picMinutes != null ? { pic_time: picMinutes } : {}),
+				...(sicMinutes != null ? { sic_time: sicMinutes } : {}),
+				...(nightMinutes != null ? { night_time: nightMinutes } : {}),
+				...(instrumentMinutes != null ? { instrument_time: instrumentMinutes } : {}),
+				...(crossCountryMinutes != null ? { cross_country_time: crossCountryMinutes } : {}),
 				...(remarks ? { remarks } : {})
 			});
 
@@ -272,6 +297,50 @@
 					value={displayPicTime}
 					oninput={handlePicTimeInput}
 					placeholder="2.3"
+					inputmode="decimal"
+				/>
+			</div>
+
+			<div>
+				<label for="sic-time">SIC Time (decimal hours)</label>
+				<input
+					id="sic-time"
+					type="text"
+					bind:value={sicTimeInput}
+					placeholder="0.0"
+					inputmode="decimal"
+				/>
+			</div>
+
+			<div>
+				<label for="night-time">Night Time (decimal hours)</label>
+				<input
+					id="night-time"
+					type="text"
+					bind:value={nightTimeInput}
+					placeholder="0.0"
+					inputmode="decimal"
+				/>
+			</div>
+
+			<div>
+				<label for="instrument-time">Instrument Time (decimal hours)</label>
+				<input
+					id="instrument-time"
+					type="text"
+					bind:value={instrumentTimeInput}
+					placeholder="0.0"
+					inputmode="decimal"
+				/>
+			</div>
+
+			<div>
+				<label for="xc-time">Cross Country Time (decimal hours)</label>
+				<input
+					id="xc-time"
+					type="text"
+					bind:value={crossCountryTimeInput}
+					placeholder="0.0"
 					inputmode="decimal"
 				/>
 			</div>

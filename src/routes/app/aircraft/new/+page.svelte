@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { aircraftCollection } from '../../../../collections/useAircraft';
 	import { getConvexClient } from '$lib/convex';
@@ -36,6 +37,7 @@
 			const id = crypto.randomUUID();
 			aircraftCollection.get().insert({
 				id,
+				ownerId: page.data.user?.sub,
 				tail_number: tailNumber.toUpperCase(),
 				...(selectedTypeId ? { aircraft_type_id: selectedTypeId } : {}),
 				...(notes ? { notes } : {}),

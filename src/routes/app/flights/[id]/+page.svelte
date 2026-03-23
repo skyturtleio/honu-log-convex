@@ -35,9 +35,13 @@
 	function createAircraft(tailNumber: string): Promise<string> {
 		const now = Date.now();
 		const id = crypto.randomUUID();
-		aircraftCollection
-			.get()
-			.insert({ id, tail_number: tailNumber, createdAt: now, updatedAt: now });
+		aircraftCollection.get().insert({
+			id,
+			tail_number: tailNumber,
+			ownerId: page.data.user?.sub,
+			createdAt: now,
+			updatedAt: now
+		});
 		return Promise.resolve(id);
 	}
 
@@ -64,6 +68,10 @@
 	let totalTimeOverride = $state(false);
 	let picTimeInput = $state('');
 	let picTimeOverride = $state(false);
+	let sicTimeInput = $state('');
+	let nightTimeInput = $state('');
+	let instrumentTimeInput = $state('');
+	let crossCountryTimeInput = $state('');
 
 	let dayLandings = $state(0);
 	let nightLandings = $state(0);
@@ -110,6 +118,13 @@
 			picTimeInput = '';
 			picTimeOverride = false;
 		}
+
+		sicTimeInput = data.sic_time != null ? formatDecimalHours(data.sic_time) : '';
+		nightTimeInput = data.night_time != null ? formatDecimalHours(data.night_time) : '';
+		instrumentTimeInput =
+			data.instrument_time != null ? formatDecimalHours(data.instrument_time) : '';
+		crossCountryTimeInput =
+			data.cross_country_time != null ? formatDecimalHours(data.cross_country_time) : '';
 
 		const dayEntry = data.landings?.find((l) => l.type === 'day');
 		const nightEntry = data.landings?.find((l) => l.type === 'night');
@@ -188,6 +203,17 @@
 				picMinutes = totalMinutes;
 			}
 
+			const sicMinutes = sicTimeInput ? (parseDecimalHours(sicTimeInput) ?? undefined) : undefined;
+			const nightMinutes = nightTimeInput
+				? (parseDecimalHours(nightTimeInput) ?? undefined)
+				: undefined;
+			const instrumentMinutes = instrumentTimeInput
+				? (parseDecimalHours(instrumentTimeInput) ?? undefined)
+				: undefined;
+			const crossCountryMinutes = crossCountryTimeInput
+				? (parseDecimalHours(crossCountryTimeInput) ?? undefined)
+				: undefined;
+
 			const landings: Array<{ type: string; count: number }> = [];
 			if (dayLandings > 0) landings.push({ type: 'day', count: dayLandings });
 			if (nightLandings > 0) landings.push({ type: 'night', count: nightLandings });
@@ -216,6 +242,10 @@
 				if (resolved.time_in) draft.time_in = resolved.time_in;
 				if (totalMinutes != null) draft.total_time = totalMinutes;
 				if (picMinutes != null) draft.pic_time = picMinutes;
+				draft.sic_time = sicMinutes;
+				draft.night_time = nightMinutes;
+				draft.instrument_time = instrumentMinutes;
+				draft.cross_country_time = crossCountryMinutes;
 				if (remarks) draft.remarks = remarks;
 			});
 
@@ -381,6 +411,50 @@
 						value={displayPicTime}
 						oninput={handlePicTimeInput}
 						placeholder="2.3"
+						inputmode="decimal"
+					/>
+				</div>
+
+				<div>
+					<label for="sic-time">SIC Time (decimal hours)</label>
+					<input
+						id="sic-time"
+						type="text"
+						bind:value={sicTimeInput}
+						placeholder="0.0"
+						inputmode="decimal"
+					/>
+				</div>
+
+				<div>
+					<label for="night-time">Night Time (decimal hours)</label>
+					<input
+						id="night-time"
+						type="text"
+						bind:value={nightTimeInput}
+						placeholder="0.0"
+						inputmode="decimal"
+					/>
+				</div>
+
+				<div>
+					<label for="instrument-time">Instrument Time (decimal hours)</label>
+					<input
+						id="instrument-time"
+						type="text"
+						bind:value={instrumentTimeInput}
+						placeholder="0.0"
+						inputmode="decimal"
+					/>
+				</div>
+
+				<div>
+					<label for="xc-time">Cross Country Time (decimal hours)</label>
+					<input
+						id="xc-time"
+						type="text"
+						bind:value={crossCountryTimeInput}
+						placeholder="0.0"
 						inputmode="decimal"
 					/>
 				</div>
