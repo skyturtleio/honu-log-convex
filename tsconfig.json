@@ -14,6 +14,7 @@
 		"exactOptionalPropertyTypes": true,
 		"noUnusedLocals": true,
 		"noImplicitOverride": true,
+		"verbatimModuleSyntax": true,
 		"moduleResolution": "bundler",
 		"plugins": [{ "name": "typescript-svelte-plugin" }, { "name": "@effect/language-service" }]
 	}
