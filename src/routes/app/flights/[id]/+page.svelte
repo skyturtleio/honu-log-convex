@@ -25,6 +25,13 @@
 		flight?.aircraft_id ? (aircraftById.get(flight.aircraft_id) ?? undefined) : undefined
 	);
 
+	// Support ?edit=true query param to open in edit mode
+	$effect(() => {
+		if (flight && page.url.searchParams.get('edit') === 'true' && !editing) {
+			startEditing();
+		}
+	});
+
 	function createAircraft(tailNumber: string): Promise<string> {
 		const now = Date.now();
 		const id = crypto.randomUUID();

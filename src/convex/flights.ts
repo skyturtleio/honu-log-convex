@@ -3,8 +3,7 @@ import type { GenericMutationCtx, GenericQueryCtx, GenericDataModel } from 'conv
 import { components } from './_generated/api';
 import type { Flight } from './types';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const r = replicate((components as any).replicate);
+const r = replicate(components.replicate);
 
 async function requireAuth(
 	ctx: GenericQueryCtx<GenericDataModel> | GenericMutationCtx<GenericDataModel>

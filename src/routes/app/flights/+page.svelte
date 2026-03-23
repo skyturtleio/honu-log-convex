@@ -1,8 +1,12 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { flightsCollection } from '../../../collections/useFlights';
 	import { aircraftCollection } from '../../../collections/useAircraft';
 	import { useCollection } from '$lib/useCollection.svelte';
+
+	let deletingId = $state<string | null>(null);
+	let error = $state('');
 
 	const flightsStore = useCollection(flightsCollection.get());
 	const aircraftStore = useCollection(aircraftCollection.get());
@@ -13,9 +17,25 @@
 
 	const aircraftById = $derived(new Map(aircraftStore.data.map((a) => [a.id, a.tail_number])));
 
+	function goToEdit(id: string) {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() is used, query param appended after
+		goto(resolve('/app/flights/[id]', { id }) + '?edit=true');
+	}
+
 	function formatTime(minutes: number | undefined): string {
 		if (minutes == null) return '--';
 		return (minutes / 60).toFixed(1);
+	}
+
+	async function handleDelete(id: string) {
+		try {
+			error = '';
+			await flightsCollection.get().delete(id);
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to delete flight';
+		} finally {
+			deletingId = null;
+		}
 	}
 </script>
 
@@ -24,6 +44,10 @@
 		<h1>Flights</h1>
 		<a href={resolve('/app/flights/new')}>New Flight</a>
 	</header>
+
+	{#if error}
+		<p role="alert" style="color: red;">{error}</p>
+	{/if}
 
 	{#if sortedFlights.length > 0}
 		<table>
@@ -57,6 +81,15 @@
 						<td>{formatTime(flight.total_time)}</td>
 						<td>
 							<a href={resolve('/app/flights/[id]', { id: flight.id })}>View</a>
+							<button type="button" onclick={() => goToEdit(flight.id)}>Edit</button>
+							{#if deletingId === flight.id}
+								<button type="button" onclick={() => handleDelete(flight.id)} style="color: red;"
+									>Confirm</button
+								>
+								<button type="button" onclick={() => (deletingId = null)}>Cancel</button>
+							{:else}
+								<button type="button" onclick={() => (deletingId = flight.id)}>Delete</button>
+							{/if}
 						</td>
 					</tr>
 				{/each}
