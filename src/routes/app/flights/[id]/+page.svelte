@@ -280,6 +280,9 @@
 						bind:value={aircraftId}
 						oncreate={createAircraft}
 					/>
+					{#if aircraftId}
+						<a href={resolve('/app/aircraft')} style="font-size: 0.85em;">Edit Aircraft Details</a>
+					{/if}
 				</div>
 
 				<div>
@@ -467,7 +470,12 @@
 
 			{#if aircraftTail}
 				<dt>Aircraft</dt>
-				<dd>{aircraftTail}</dd>
+				<dd>
+					{aircraftTail}
+					<a href={resolve('/app/aircraft')} style="margin-left: 0.5rem; font-size: 0.85em;"
+						>Edit Aircraft</a
+					>
+				</dd>
 			{/if}
 
 			{#if flight.dep_airport || flight.arr_airport}
