@@ -52,7 +52,7 @@
 						</td>
 						<td>{formatTime(flight.total_time)}</td>
 						<td>
-							<a href={resolve(`/app/flights/${flight._id}` as `/app/flights`)}>View</a>
+							<a href={resolve('/app/flights/[id]', { id: flight._id })}>View</a>
 						</td>
 					</tr>
 				{/each}
