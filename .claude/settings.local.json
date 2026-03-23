@@ -4,7 +4,8 @@
 			"WebFetch(domain:docs.logto.io)",
 			"WebFetch(domain:docs.orbstack.dev)",
 			"mcp__svelte__svelte-autofixer",
-			"mcp__svelte__get-documentation"
+			"mcp__svelte__get-documentation",
+			"WebSearch"
 		]
 	},
 	"enableAllProjectMcpServers": true,
