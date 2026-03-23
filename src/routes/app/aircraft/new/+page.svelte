@@ -1,15 +1,25 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
-	import { useConvexClient, useQuery } from 'convex-svelte';
+	import { onMount } from 'svelte';
+	import { aircraftCollection } from '../../../../collections/useAircraft';
+	import { getConvexClient } from '$lib/convex';
 	import { api } from '../../../../convex/_generated/api';
-	import type { Id } from '../../../../convex/_generated/dataModel';
 
-	const client = useConvexClient();
-	const aircraftTypes = useQuery(api.aircraft.listTypes, {});
+	let aircraftTypes = $state<
+		Array<{ _id: string; designator: string; make: string; model: string }>
+	>([]);
+
+	onMount(() => {
+		const client = getConvexClient();
+		const unsub = client.onUpdate(api.aircraft.listTypes, {}, (data) => {
+			if (data) aircraftTypes = data;
+		});
+		return unsub;
+	});
 
 	let tailNumber = $state('');
-	let aircraftTypeId = $state('');
+	let selectedTypeId = $state('');
 	let notes = $state('');
 	let submitting = $state(false);
 	let error = $state('');
@@ -17,19 +27,20 @@
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		if (submitting) return;
-		if (!aircraftTypeId) {
-			error = 'Please select an aircraft type.';
-			return;
-		}
 
 		submitting = true;
 		error = '';
 
 		try {
-			await client.mutation(api.aircraft.create, {
+			const now = Date.now();
+			const id = crypto.randomUUID();
+			aircraftCollection.get().insert({
+				id,
 				tail_number: tailNumber.toUpperCase(),
-				aircraft_type_id: aircraftTypeId as Id<'aircraft_types'>,
-				...(notes ? { notes } : {})
+				...(selectedTypeId ? { aircraft_type_id: selectedTypeId } : {}),
+				...(notes ? { notes } : {}),
+				createdAt: now,
+				updatedAt: now
 			});
 
 			await goto(resolve('/app/aircraft'));
@@ -64,18 +75,12 @@
 
 			<div>
 				<label for="aircraft-type">Aircraft Type</label>
-				{#if aircraftTypes.isLoading}
-					<p>Loading types...</p>
-				{:else if aircraftTypes.error}
-					<p style="color: red;">Error loading types: {aircraftTypes.error.message}</p>
-				{:else}
-					<select id="aircraft-type" bind:value={aircraftTypeId} required>
-						<option value="" disabled>Select a type...</option>
-						{#each aircraftTypes.data ?? [] as t (t._id)}
-							<option value={t._id}>{t.designator} - {t.make} {t.model}</option>
-						{/each}
-					</select>
-				{/if}
+				<select id="aircraft-type" bind:value={selectedTypeId}>
+					<option value="">Select a type...</option>
+					{#each aircraftTypes as t (t._id)}
+						<option value={t._id}>{t.designator} - {t.make} {t.model}</option>
+					{/each}
+				</select>
 			</div>
 
 			<div>

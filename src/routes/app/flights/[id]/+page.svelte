@@ -2,9 +2,10 @@
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { useConvexClient, useQuery } from 'convex-svelte';
-	import { api } from '../../../../convex/_generated/api';
-	import type { Id } from '../../../../convex/_generated/dataModel';
+	import { flightsCollection } from '../../../../collections/useFlights';
+	import type { Flight } from '../../../../collections/useFlights';
+	import { aircraftCollection } from '../../../../collections/useAircraft';
+	import { useCollection } from '$lib/useCollection.svelte';
 	import {
 		resolveOooiTimes,
 		calculateBlockTime,
@@ -14,16 +15,23 @@
 	} from '$lib/flights/oooi';
 	import AircraftPicker from '$lib/components/AircraftPicker.svelte';
 
-	const client = useConvexClient();
-	const flightId = $derived(page.params.id);
-	const flight = useQuery(api.flights.get, () => ({ id: flightId as Id<'flights'> }));
-	const aircraftList = useQuery(api.aircraft.list, {});
+	const flightsStore = useCollection(flightsCollection.get());
+	const aircraftStore = useCollection(aircraftCollection.get());
 
-	async function createAircraft(tailNumber: string): Promise<string> {
-		const id = await client.mutation(api.aircraft.create, {
-			tail_number: tailNumber
-		});
-		return id;
+	const flightId = $derived(page.params.id as string);
+	const flight = $derived(flightsStore.data.find((f) => f.id === flightId) ?? null);
+	const aircraftById = $derived(new Map(aircraftStore.data.map((a) => [a.id, a.tail_number])));
+	const aircraftTail = $derived(
+		flight?.aircraft_id ? (aircraftById.get(flight.aircraft_id) ?? undefined) : undefined
+	);
+
+	function createAircraft(tailNumber: string): Promise<string> {
+		const now = Date.now();
+		const id = crypto.randomUUID();
+		aircraftCollection
+			.get()
+			.insert({ id, tail_number: tailNumber, createdAt: now, updatedAt: now });
+		return Promise.resolve(id);
 	}
 
 	// Edit mode state
@@ -63,14 +71,13 @@
 	let populatedFor = $state('');
 
 	$effect(() => {
-		const data = flight.data;
-		if (data && populatedFor !== data._id) {
-			populateForm(data);
-			populatedFor = data._id;
+		if (flight && populatedFor !== flight.id) {
+			populateForm(flight);
+			populatedFor = flight.id;
 		}
 	});
 
-	function populateForm(data: NonNullable<typeof flight.data>) {
+	function populateForm(data: Flight) {
 		flightDate = data.flight_date;
 		flightNumber = data.flight_number ?? '';
 		aircraftId = data.aircraft_id ?? '';
@@ -132,18 +139,9 @@
 		picTimeOverride = true;
 	}
 
-	// Resolve aircraft tail number for display
-	const aircraftTail = $derived.by(() => {
-		const data = flight.data;
-		if (!data?.aircraft_id) return undefined;
-		const list = aircraftList.data ?? [];
-		const found = list.find((a) => a._id === data.aircraft_id);
-		return found?.tail_number;
-	});
-
 	function startEditing() {
-		if (flight.data) {
-			populateForm(flight.data);
+		if (flight) {
+			populateForm(flight);
 		}
 		editing = true;
 		confirmingDelete = false;
@@ -196,22 +194,22 @@
 				});
 			}
 
-			await client.mutation(api.flights.update, {
-				id: flightId as Id<'flights'>,
-				flight_date: flightDate,
-				landings,
-				approaches,
-				...(flightNumber ? { flight_number: flightNumber } : {}),
-				...(aircraftId ? { aircraft_id: aircraftId as Id<'aircraft'> } : {}),
-				...(depAirport ? { dep_airport: depAirport } : {}),
-				...(arrAirport ? { arr_airport: arrAirport } : {}),
-				...(resolved.time_out ? { time_out: resolved.time_out } : {}),
-				...(resolved.time_off ? { time_off: resolved.time_off } : {}),
-				...(resolved.time_on ? { time_on: resolved.time_on } : {}),
-				...(resolved.time_in ? { time_in: resolved.time_in } : {}),
-				...(totalMinutes != null ? { total_time: totalMinutes } : {}),
-				...(picMinutes != null ? { pic_time: picMinutes } : {}),
-				...(remarks ? { remarks } : {})
+			flightsCollection.get().update(flightId, (draft) => {
+				draft.flight_date = flightDate;
+				draft.landings = landings;
+				draft.approaches = approaches;
+				draft.updatedAt = Date.now();
+				if (flightNumber) draft.flight_number = flightNumber;
+				if (aircraftId) draft.aircraft_id = aircraftId;
+				if (depAirport) draft.dep_airport = depAirport;
+				if (arrAirport) draft.arr_airport = arrAirport;
+				if (resolved.time_out) draft.time_out = resolved.time_out;
+				if (resolved.time_off) draft.time_off = resolved.time_off;
+				if (resolved.time_on) draft.time_on = resolved.time_on;
+				if (resolved.time_in) draft.time_in = resolved.time_in;
+				if (totalMinutes != null) draft.total_time = totalMinutes;
+				if (picMinutes != null) draft.pic_time = picMinutes;
+				if (remarks) draft.remarks = remarks;
 			});
 
 			editing = false;
@@ -228,9 +226,7 @@
 		error = '';
 
 		try {
-			await client.mutation(api.flights.remove, {
-				id: flightId as Id<'flights'>
-			});
+			flightsCollection.get().delete(flightId);
 			await goto(resolve('/app/flights'));
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to delete flight';
@@ -242,15 +238,12 @@
 <div>
 	<a href={resolve('/app/flights')}>Back to Flights</a>
 
-	{#if flight.isLoading}
-		<h1>Flight Details</h1>
-		<p>Loading flight...</p>
-	{:else if flight.error}
-		<h1>Flight Details</h1>
-		<p role="alert" style="color: red;">Error loading flight: {flight.error.message}</p>
-	{:else if !flight.data}
+	{#if flight === null && flightId}
 		<h1>Flight Details</h1>
 		<p>Flight not found.</p>
+	{:else if flight === null}
+		<h1>Flight Details</h1>
+		<p>Loading flight...</p>
 	{:else if editing}
 		<h1>Edit Flight</h1>
 
@@ -273,7 +266,10 @@
 				<div>
 					<label for="aircraft-id">Aircraft</label>
 					<AircraftPicker
-						aircraftList={aircraftList.data ?? []}
+						aircraftList={aircraftStore.data.map((a) => ({
+							_id: a.id,
+							tail_number: a.tail_number
+						}))}
 						bind:value={aircraftId}
 						oncreate={createAircraft}
 					/>
@@ -455,11 +451,11 @@
 
 		<dl>
 			<dt>Date</dt>
-			<dd>{flight.data.flight_date}</dd>
+			<dd>{flight.flight_date}</dd>
 
-			{#if flight.data.flight_number}
+			{#if flight.flight_number}
 				<dt>Flight Number</dt>
-				<dd>{flight.data.flight_number}</dd>
+				<dd>{flight.flight_number}</dd>
 			{/if}
 
 			{#if aircraftTail}
@@ -467,74 +463,74 @@
 				<dd>{aircraftTail}</dd>
 			{/if}
 
-			{#if flight.data.dep_airport || flight.data.arr_airport}
+			{#if flight.dep_airport || flight.arr_airport}
 				<dt>Route</dt>
-				<dd>{flight.data.dep_airport ?? '--'} &rarr; {flight.data.arr_airport ?? '--'}</dd>
+				<dd>{flight.dep_airport ?? '--'} &rarr; {flight.arr_airport ?? '--'}</dd>
 			{/if}
 
-			{#if flight.data.time_out}
+			{#if flight.time_out}
 				<dt>Out</dt>
-				<dd>{toZuluDisplay(flight.data.time_out)}Z</dd>
+				<dd>{toZuluDisplay(flight.time_out)}Z</dd>
 			{/if}
 
-			{#if flight.data.time_off}
+			{#if flight.time_off}
 				<dt>Off</dt>
-				<dd>{toZuluDisplay(flight.data.time_off)}Z</dd>
+				<dd>{toZuluDisplay(flight.time_off)}Z</dd>
 			{/if}
 
-			{#if flight.data.time_on}
+			{#if flight.time_on}
 				<dt>On</dt>
-				<dd>{toZuluDisplay(flight.data.time_on)}Z</dd>
+				<dd>{toZuluDisplay(flight.time_on)}Z</dd>
 			{/if}
 
-			{#if flight.data.time_in}
+			{#if flight.time_in}
 				<dt>In</dt>
-				<dd>{toZuluDisplay(flight.data.time_in)}Z</dd>
+				<dd>{toZuluDisplay(flight.time_in)}Z</dd>
 			{/if}
 
-			{#if flight.data.total_time != null}
+			{#if flight.total_time != null}
 				<dt>Total Time</dt>
-				<dd>{formatDecimalHours(flight.data.total_time)}</dd>
+				<dd>{formatDecimalHours(flight.total_time)}</dd>
 			{/if}
 
-			{#if flight.data.pic_time != null}
+			{#if flight.pic_time != null}
 				<dt>PIC Time</dt>
-				<dd>{formatDecimalHours(flight.data.pic_time)}</dd>
+				<dd>{formatDecimalHours(flight.pic_time)}</dd>
 			{/if}
 
-			{#if flight.data.sic_time != null}
+			{#if flight.sic_time != null}
 				<dt>SIC Time</dt>
-				<dd>{formatDecimalHours(flight.data.sic_time)}</dd>
+				<dd>{formatDecimalHours(flight.sic_time)}</dd>
 			{/if}
 
-			{#if flight.data.night_time != null}
+			{#if flight.night_time != null}
 				<dt>Night Time</dt>
-				<dd>{formatDecimalHours(flight.data.night_time)}</dd>
+				<dd>{formatDecimalHours(flight.night_time)}</dd>
 			{/if}
 
-			{#if flight.data.instrument_time != null}
+			{#if flight.instrument_time != null}
 				<dt>Instrument Time</dt>
-				<dd>{formatDecimalHours(flight.data.instrument_time)}</dd>
+				<dd>{formatDecimalHours(flight.instrument_time)}</dd>
 			{/if}
 
-			{#if flight.data.cross_country_time != null}
+			{#if flight.cross_country_time != null}
 				<dt>Cross Country Time</dt>
-				<dd>{formatDecimalHours(flight.data.cross_country_time)}</dd>
+				<dd>{formatDecimalHours(flight.cross_country_time)}</dd>
 			{/if}
 
-			{#if flight.data.landings && flight.data.landings.length > 0}
+			{#if flight.landings && flight.landings.length > 0}
 				<dt>Landings</dt>
 				<dd>
-					{#each flight.data.landings as landing, i (i)}
+					{#each flight.landings as landing, i (i)}
 						<span>{landing.type}: {landing.count}</span>
 					{/each}
 				</dd>
 			{/if}
 
-			{#if flight.data.approaches && flight.data.approaches.length > 0}
+			{#if flight.approaches && flight.approaches.length > 0}
 				<dt>Approaches</dt>
 				<dd>
-					{#each flight.data.approaches as approach, i (i)}
+					{#each flight.approaches as approach, i (i)}
 						<span>
 							{approach.type}
 							{#if approach.runway}RWY {approach.runway}{/if}
@@ -544,9 +540,9 @@
 				</dd>
 			{/if}
 
-			{#if flight.data.remarks}
+			{#if flight.remarks}
 				<dt>Remarks</dt>
-				<dd>{flight.data.remarks}</dd>
+				<dd>{flight.remarks}</dd>
 			{/if}
 		</dl>
 	{/if}

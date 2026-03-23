@@ -1,12 +1,25 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { useConvexClient, useQuery } from 'convex-svelte';
+	import { onMount } from 'svelte';
+	import { aircraftCollection } from '../../../collections/useAircraft';
+	import type { Aircraft } from '../../../collections/useAircraft';
+	import { useCollection } from '$lib/useCollection.svelte';
+	import { getConvexClient } from '$lib/convex';
 	import { api } from '../../../convex/_generated/api';
-	import type { Id } from '../../../convex/_generated/dataModel';
 
-	const client = useConvexClient();
-	const aircraft = useQuery(api.aircraft.list, {});
-	const aircraftTypes = useQuery(api.aircraft.listTypes, {});
+	const aircraftStore = useCollection(aircraftCollection.get());
+
+	let aircraftTypes = $state<
+		Array<{ _id: string; designator: string; make: string; model: string }>
+	>([]);
+
+	onMount(() => {
+		const client = getConvexClient();
+		const unsub = client.onUpdate(api.aircraft.listTypes, {}, (data) => {
+			if (data) aircraftTypes = data;
+		});
+		return unsub;
+	});
 
 	let editingId = $state<string | null>(null);
 	let editTailNumber = $state('');
@@ -16,22 +29,17 @@
 	let deleting = $state<string | null>(null);
 	let error = $state('');
 
-	const typesById = $derived(new Map((aircraftTypes.data ?? []).map((t) => [t._id, t])));
+	const typesById = $derived(new Map(aircraftTypes.map((t) => [t._id, t])));
 
 	function formatType(typeId: string | undefined): string {
 		if (!typeId) return '--';
-		const t = typesById.get(typeId as Id<'aircraft_types'>);
+		const t = typesById.get(typeId);
 		if (!t) return '--';
 		return `${t.designator} - ${t.make} ${t.model}`;
 	}
 
-	function startEdit(ac: {
-		_id: string;
-		tail_number: string;
-		aircraft_type_id?: string;
-		notes?: string;
-	}) {
-		editingId = ac._id;
+	function startEdit(ac: Aircraft) {
+		editingId = ac.id;
 		editTailNumber = ac.tail_number;
 		editAircraftTypeId = ac.aircraft_type_id ?? '';
 		editNotes = ac.notes ?? '';
@@ -49,13 +57,11 @@
 		error = '';
 
 		try {
-			await client.mutation(api.aircraft.update, {
-				id: editingId as Id<'aircraft'>,
-				tail_number: editTailNumber,
-				...(editAircraftTypeId
-					? { aircraft_type_id: editAircraftTypeId as Id<'aircraft_types'> }
-					: {}),
-				...(editNotes ? { notes: editNotes } : {})
+			aircraftCollection.get().update(editingId, (draft) => {
+				draft.tail_number = editTailNumber;
+				draft.aircraft_type_id = editAircraftTypeId || undefined;
+				draft.notes = editNotes || undefined;
+				draft.updatedAt = Date.now();
 			});
 			editingId = null;
 		} catch (err) {
@@ -71,7 +77,7 @@
 		error = '';
 
 		try {
-			await client.mutation(api.aircraft.remove, { id: id as Id<'aircraft'> });
+			aircraftCollection.get().delete(id);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to delete aircraft';
 		} finally {
@@ -90,13 +96,7 @@
 		<p role="alert" style="color: red;">{error}</p>
 	{/if}
 
-	{#if aircraft.isLoading || aircraftTypes.isLoading}
-		<p>Loading aircraft...</p>
-	{:else if aircraft.error}
-		<p>Error loading aircraft: {aircraft.error.message}</p>
-	{:else if aircraftTypes.error}
-		<p>Error loading aircraft types: {aircraftTypes.error.message}</p>
-	{:else if aircraft.data && aircraft.data.length > 0}
+	{#if aircraftStore.data.length > 0}
 		<table>
 			<thead>
 				<tr>
@@ -107,8 +107,8 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each aircraft.data as ac (ac._id)}
-					{#if editingId === ac._id}
+				{#each aircraftStore.data as ac (ac.id)}
+					{#if editingId === ac.id}
 						<tr>
 							<td>
 								<input
@@ -120,7 +120,8 @@
 							</td>
 							<td>
 								<select bind:value={editAircraftTypeId}>
-									{#each aircraftTypes.data ?? [] as t (t._id)}
+									<option value="">-- None --</option>
+									{#each aircraftTypes as t (t._id)}
 										<option value={t._id}>{t.designator} - {t.make} {t.model}</option>
 									{/each}
 								</select>
@@ -148,10 +149,10 @@
 							<td>
 								<button onclick={() => startEdit(ac)}>Edit</button>
 								<button
-									onclick={() => handleDelete(ac._id, ac.tail_number)}
-									disabled={deleting === ac._id}
+									onclick={() => handleDelete(ac.id, ac.tail_number)}
+									disabled={deleting === ac.id}
 								>
-									{deleting === ac._id ? 'Deleting...' : 'Delete'}
+									{deleting === ac.id ? 'Deleting...' : 'Delete'}
 								</button>
 							</td>
 						</tr>

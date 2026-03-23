@@ -1,14 +1,55 @@
+import { replicate } from '@trestleinc/replicate/server';
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
+import type { GenericMutationCtx, GenericQueryCtx, GenericDataModel } from 'convex/server';
+import { components } from './_generated/api';
 import { getUserId } from './model/auth';
+import type { Aircraft } from './types';
 
-// --- Aircraft Types ---
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const r = replicate((components as any).replicate);
+
+async function requireAuth(
+	ctx: GenericQueryCtx<GenericDataModel> | GenericMutationCtx<GenericDataModel>
+) {
+	const identity = await ctx.auth.getUserIdentity();
+	if (!identity) throw new Error('Not authenticated');
+	return identity;
+}
+
+// --- Replicate-managed aircraft collection ---
+
+export const aircraft = r<Aircraft>({
+	collection: 'aircraft',
+	hooks: {
+		evalRead: async (ctx) => {
+			await requireAuth(ctx);
+		},
+		evalWrite: async (ctx, doc) => {
+			const identity = await requireAuth(ctx);
+			if (doc.ownerId && doc.ownerId !== identity.subject) {
+				throw new Error("Forbidden: cannot write another user's aircraft");
+			}
+		},
+		evalRemove: async (ctx, docId) => {
+			const identity = await requireAuth(ctx);
+			const existing = await (ctx as GenericMutationCtx<GenericDataModel>).db
+				.query('aircraft')
+				.withIndex('by_doc_id', (q) => q.eq('id', docId))
+				.first();
+			if (existing && existing.ownerId && existing.ownerId !== identity.subject) {
+				throw new Error("Forbidden: cannot delete another user's aircraft");
+			}
+		}
+	}
+});
+
+// --- Vanilla Convex: aircraft_types (reference data) ---
 
 export const listTypes = query({
 	args: {},
 	handler: async (ctx) => {
 		const userId = await getUserId(ctx);
-		// Return shared reference types (user_id undefined) + user's custom types
 		const shared = await ctx.db
 			.query('aircraft_types')
 			.withIndex('by_user', (q) => q.eq('user_id', undefined))
@@ -36,85 +77,5 @@ export const createType = mutation({
 			...args,
 			user_id: userId
 		});
-	}
-});
-
-// --- Aircraft ---
-
-export const list = query({
-	args: {},
-	handler: async (ctx) => {
-		const userId = await getUserId(ctx);
-		return await ctx.db
-			.query('aircraft')
-			.withIndex('by_user', (q) => q.eq('user_id', userId))
-			.collect();
-	}
-});
-
-export const get = query({
-	args: { id: v.id('aircraft') },
-	handler: async (ctx, args) => {
-		const userId = await getUserId(ctx);
-		const aircraft = await ctx.db.get(args.id);
-		if (!aircraft || aircraft.user_id !== userId) {
-			return null;
-		}
-		return aircraft;
-	}
-});
-
-export const create = mutation({
-	args: {
-		tail_number: v.string(),
-		aircraft_type_id: v.optional(v.id('aircraft_types')),
-		notes: v.optional(v.string())
-	},
-	handler: async (ctx, args) => {
-		const userId = await getUserId(ctx);
-		return await ctx.db.insert('aircraft', {
-			...args,
-			user_id: userId
-		});
-	}
-});
-
-export const update = mutation({
-	args: {
-		id: v.id('aircraft'),
-		tail_number: v.optional(v.string()),
-		aircraft_type_id: v.optional(v.id('aircraft_types')),
-		notes: v.optional(v.string())
-	},
-	handler: async (ctx, args) => {
-		const userId = await getUserId(ctx);
-		const { id, ...fields } = args;
-
-		const existing = await ctx.db.get(id);
-		if (!existing || existing.user_id !== userId) {
-			throw new Error('Aircraft not found');
-		}
-
-		const patch: Record<string, unknown> = {};
-		for (const [key, value] of Object.entries(fields)) {
-			if (value !== undefined) {
-				patch[key] = value;
-			}
-		}
-
-		await ctx.db.patch(id, patch);
-		return id;
-	}
-});
-
-export const remove = mutation({
-	args: { id: v.id('aircraft') },
-	handler: async (ctx, args) => {
-		const userId = await getUserId(ctx);
-		const aircraft = await ctx.db.get(args.id);
-		if (!aircraft || aircraft.user_id !== userId) {
-			throw new Error('Aircraft not found');
-		}
-		await ctx.db.delete(args.id);
 	}
 });

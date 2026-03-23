@@ -1,9 +1,17 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { useQuery } from 'convex-svelte';
-	import { api } from '../../../convex/_generated/api';
+	import { flightsCollection } from '../../../collections/useFlights';
+	import { aircraftCollection } from '../../../collections/useAircraft';
+	import { useCollection } from '$lib/useCollection.svelte';
 
-	const flights = useQuery(api.flights.list, {});
+	const flightsStore = useCollection(flightsCollection.get());
+	const aircraftStore = useCollection(aircraftCollection.get());
+
+	const sortedFlights = $derived(
+		[...flightsStore.data].sort((a, b) => b.flight_date.localeCompare(a.flight_date))
+	);
+
+	const aircraftById = $derived(new Map(aircraftStore.data.map((a) => [a.id, a.tail_number])));
 
 	function formatTime(minutes: number | undefined): string {
 		if (minutes == null) return '--';
@@ -17,11 +25,7 @@
 		<a href={resolve('/app/flights/new')}>New Flight</a>
 	</header>
 
-	{#if flights.isLoading}
-		<p>Loading flights...</p>
-	{:else if flights.error}
-		<p>Error loading flights: {flights.error.message}</p>
-	{:else if flights.data && flights.data.flights.length > 0}
+	{#if sortedFlights.length > 0}
 		<table>
 			<thead>
 				<tr>
@@ -34,11 +38,11 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each flights.data.flights as flight (flight._id)}
+				{#each sortedFlights as flight (flight.id)}
 					<tr>
 						<td>{flight.flight_date}</td>
 						<td>{flight.flight_number ?? '--'}</td>
-						<td>{flight.tail_number ?? '--'}</td>
+						<td>{flight.aircraft_id ? (aircraftById.get(flight.aircraft_id) ?? '--') : '--'}</td>
 						<td>
 							{#if flight.dep_airport && flight.arr_airport}
 								{flight.dep_airport} &rarr; {flight.arr_airport}
@@ -52,16 +56,12 @@
 						</td>
 						<td>{formatTime(flight.total_time)}</td>
 						<td>
-							<a href={resolve('/app/flights/[id]', { id: flight._id })}>View</a>
+							<a href={resolve('/app/flights/[id]', { id: flight.id })}>View</a>
 						</td>
 					</tr>
 				{/each}
 			</tbody>
 		</table>
-
-		{#if flights.data.hasMore}
-			<p>Showing first page of results.</p>
-		{/if}
 	{:else}
 		<p>No flights recorded yet. <a href={resolve('/app/flights/new')}>Add your first flight</a>.</p>
 	{/if}

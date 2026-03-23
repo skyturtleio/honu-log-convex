@@ -1,13 +1,14 @@
 <script lang="ts">
 	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/state';
-	import { setupConvex, useConvexClient } from 'convex-svelte';
-	import { PUBLIC_CONVEX_URL } from '$env/static/public';
+	import { onMount } from 'svelte';
+	import { getConvexClient } from '$lib/convex';
+	import { flightsCollection } from '../collections/useFlights';
+	import { aircraftCollection } from '../collections/useAircraft';
 
 	let { children } = $props();
 
-	setupConvex(PUBLIC_CONVEX_URL);
-	const client = useConvexClient();
+	let ready = $state(false);
 
 	async function fetchToken() {
 		const res = await fetch('/api/convex-token');
@@ -16,14 +17,23 @@
 		return data.token;
 	}
 
-	// Only set auth when user is logged in to avoid 401 noise
-	let hasUser = $derived(!!page.data.user);
-	$effect(() => {
-		if (hasUser) {
+	onMount(async () => {
+		const client = getConvexClient();
+
+		if (page.data.user) {
 			client.setAuth(fetchToken);
 		}
+
+		await Promise.all([flightsCollection.init(), aircraftCollection.init()]);
+
+		ready = true;
 	});
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
-{@render children()}
+
+{#if ready}
+	{@render children()}
+{:else}
+	<span>Loading...</span>
+{/if}

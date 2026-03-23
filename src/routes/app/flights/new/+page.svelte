@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
-	import { useConvexClient, useQuery } from 'convex-svelte';
-	import { api } from '../../../../convex/_generated/api';
-	import type { Id } from '../../../../convex/_generated/dataModel';
+	import { flightsCollection } from '../../../../collections/useFlights';
+	import { aircraftCollection } from '../../../../collections/useAircraft';
+	import { useCollection } from '$lib/useCollection.svelte';
 	import {
 		resolveOooiTimes,
 		calculateBlockTime,
@@ -12,13 +12,14 @@
 	} from '$lib/flights/oooi';
 	import AircraftPicker from '$lib/components/AircraftPicker.svelte';
 
-	const client = useConvexClient();
-	const aircraftList = useQuery(api.aircraft.list, {});
+	const aircraftStore = useCollection(aircraftCollection.get());
 
 	async function createAircraft(tailNumber: string): Promise<string> {
-		const id = await client.mutation(api.aircraft.create, {
-			tail_number: tailNumber
-		});
+		const now = Date.now();
+		const id = crypto.randomUUID();
+		aircraftCollection
+			.get()
+			.insert({ id, tail_number: tailNumber, createdAt: now, updatedAt: now });
 		return id;
 	}
 
@@ -116,12 +117,17 @@
 				});
 			}
 
-			await client.mutation(api.flights.create, {
+			const insertId = crypto.randomUUID();
+			const insertNow = Date.now();
+			flightsCollection.get().insert({
+				id: insertId,
 				flight_date: flightDate,
 				landings,
 				approaches,
+				createdAt: insertNow,
+				updatedAt: insertNow,
 				...(flightNumber ? { flight_number: flightNumber } : {}),
-				...(aircraftId ? { aircraft_id: aircraftId as Id<'aircraft'> } : {}),
+				...(aircraftId ? { aircraft_id: aircraftId } : {}),
 				...(depAirport ? { dep_airport: depAirport } : {}),
 				...(arrAirport ? { arr_airport: arrAirport } : {}),
 				...(resolved.time_out ? { time_out: resolved.time_out } : {}),
@@ -164,7 +170,7 @@
 			<div>
 				<label for="aircraft-id">Aircraft</label>
 				<AircraftPicker
-					aircraftList={aircraftList.data ?? []}
+					aircraftList={aircraftStore.data.map((a) => ({ _id: a.id, tail_number: a.tail_number }))}
 					bind:value={aircraftId}
 					oncreate={createAircraft}
 				/>

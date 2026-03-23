@@ -1,66 +1,41 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
 
-// --- Embedded sub-schemas ---
+// --- Embedded sub-validators (used in server functions) ---
 
-/** A landing entry embedded in a flight */
-const landing = v.object({
-	type: v.string(), // "day", "night", future: "carrier_day", "carrier_night", etc.
+export const landingValidator = v.object({
+	type: v.string(), // "day", "night"
 	count: v.number()
 });
 
-/** An approach entry embedded in a flight */
-const approach = v.object({
-	type: v.string(), // "ILS", "Visual", "RNAV", "VOR", "LOC", etc.
+export const approachValidator = v.object({
+	type: v.string(), // "ILS", "Visual", "RNAV", etc.
 	runway: v.string(), // e.g. "22L"
-	airport: v.string() // ICAO code, e.g. "KLGA"
+	airport: v.string() // ICAO code
 });
 
 // --- Schema ---
 
 export default defineSchema({
-	aircraft_types: defineTable({
-		user_id: v.optional(v.string()), // null = shared reference data
-		designator: v.string(), // ICAO type designator, e.g. "BCS3"
-		make: v.string(), // e.g. "Airbus"
-		model: v.string(), // e.g. "A220-300"
-		category: v.string(), // e.g. "airplane"
-		class: v.string(), // e.g. "multi-engine land"
-		engine_type: v.string() // e.g. "jet"
-	})
-		.index('by_user', ['user_id'])
-		.index('by_designator', ['designator']),
-
+	// Replicate-managed collections (id = UUID, timestamp = auto-set by Replicate)
 	aircraft: defineTable({
-		user_id: v.string(),
-		tail_number: v.string(), // e.g. "N839DN"
-		aircraft_type_id: v.optional(v.id('aircraft_types')),
-		notes: v.optional(v.string())
+		id: v.string(), // UUID from client
+		ownerId: v.optional(v.string()), // Logto user subject
+		tail_number: v.string(),
+		aircraft_type_id: v.optional(v.string()), // Convex _id of aircraft_types doc
+		notes: v.optional(v.string()),
+		timestamp: v.number() // managed by Replicate
 	})
-		.index('by_user', ['user_id'])
-		.index('by_user_tail', ['user_id', 'tail_number'])
-		.index('by_aircraft_type', ['aircraft_type_id']),
-
-	airports: defineTable({
-		user_id: v.optional(v.string()), // null = global reference data
-		icao: v.string(), // e.g. "KLGA"
-		iata: v.optional(v.string()), // e.g. "LGA"
-		name: v.string(), // e.g. "LaGuardia Airport"
-		city: v.optional(v.string()),
-		country: v.optional(v.string()),
-		latitude: v.optional(v.float64()), // for night time calc
-		longitude: v.optional(v.float64())
-	})
-		.index('by_icao', ['icao'])
-		.index('by_iata', ['iata'])
-		.index('by_user', ['user_id']),
+		.index('by_doc_id', ['id'])
+		.index('by_owner', ['ownerId']),
 
 	flights: defineTable({
-		user_id: v.string(),
+		id: v.string(), // UUID from client
+		ownerId: v.optional(v.string()), // Logto user subject
 		flight_date: v.string(), // "2024-03-15" plain date
-		flight_number: v.optional(v.string()), // e.g. "DL1234"
-		aircraft_id: v.optional(v.id('aircraft')),
-		aircraft_type_id: v.optional(v.id('aircraft_types')), // denormalized from aircraft
+		flight_number: v.optional(v.string()),
+		aircraft_id: v.optional(v.string()), // UUID ref to aircraft.id
+		aircraft_type_id: v.optional(v.string()), // Convex _id of aircraft_types
 		dep_airport: v.optional(v.string()), // ICAO code
 		arr_airport: v.optional(v.string()), // ICAO code
 
@@ -71,20 +46,48 @@ export default defineSchema({
 		time_in: v.optional(v.string()),
 
 		// Durations — integer minutes
-		total_time: v.optional(v.number()), // block time (Out to In), or manual
-		pic_time: v.optional(v.number()), // defaults to total_time
+		total_time: v.optional(v.number()),
+		pic_time: v.optional(v.number()),
 		sic_time: v.optional(v.number()),
-		night_time: v.optional(v.number()), // auto-calc from sunrise/sunset, editable
+		night_time: v.optional(v.number()),
 		instrument_time: v.optional(v.number()),
 		cross_country_time: v.optional(v.number()),
 
 		// Embedded arrays
-		landings: v.array(landing),
-		approaches: v.array(approach),
+		landings: v.array(landingValidator),
+		approaches: v.array(approachValidator),
 
-		remarks: v.optional(v.string())
+		remarks: v.optional(v.string()),
+		timestamp: v.number() // managed by Replicate
 	})
-		.index('by_user_date', ['user_id', 'flight_date'])
+		.index('by_doc_id', ['id'])
+		.index('by_owner', ['ownerId'])
+		.index('by_owner_date', ['ownerId', 'flight_date']),
+
+	// Vanilla Convex (reference data, no CRDT needed)
+	aircraft_types: defineTable({
+		user_id: v.optional(v.string()), // null = shared reference data
+		designator: v.string(),
+		make: v.string(),
+		model: v.string(),
+		category: v.string(),
+		class: v.string(),
+		engine_type: v.string()
+	})
 		.index('by_user', ['user_id'])
-		.index('by_aircraft', ['aircraft_id'])
+		.index('by_designator', ['designator']),
+
+	airports: defineTable({
+		user_id: v.optional(v.string()), // null = global reference data
+		icao: v.string(),
+		iata: v.optional(v.string()),
+		name: v.string(),
+		city: v.optional(v.string()),
+		country: v.optional(v.string()),
+		latitude: v.optional(v.float64()),
+		longitude: v.optional(v.float64())
+	})
+		.index('by_icao', ['icao'])
+		.index('by_iata', ['iata'])
+		.index('by_user', ['user_id'])
 });
