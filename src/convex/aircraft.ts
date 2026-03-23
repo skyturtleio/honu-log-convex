@@ -19,7 +19,7 @@ async function requireAuth(
 
 // --- Replicate-managed aircraft collection ---
 
-export const aircraft = r<Aircraft>({
+const _aircraft = r<Aircraft>({
 	collection: 'aircraft',
 	hooks: {
 		evalRead: async (ctx) => {
@@ -43,6 +43,8 @@ export const aircraft = r<Aircraft>({
 		}
 	}
 });
+
+export const { stream, material, recovery, insert, update, remove, mark, compact } = _aircraft;
 
 // --- Vanilla Convex: aircraft_types (reference data) ---
 

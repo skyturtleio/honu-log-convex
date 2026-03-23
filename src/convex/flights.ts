@@ -14,7 +14,7 @@ async function requireAuth(
 	return identity;
 }
 
-export const flights = r<Flight>({
+const _flights = r<Flight>({
 	collection: 'flights',
 	hooks: {
 		evalRead: async (ctx) => {
@@ -38,3 +38,5 @@ export const flights = r<Flight>({
 		}
 	}
 });
+
+export const { stream, material, recovery, insert, update, remove, mark, compact } = _flights;

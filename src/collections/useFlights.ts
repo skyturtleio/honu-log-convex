@@ -48,7 +48,7 @@ export const flightsCollection = collection.create({
 	config: () => ({
 		convexClient: getConvexClient(),
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		api: (api as any).flights.flights,
+		api: (api as any).flights,
 		schema: flightSchema,
 		getKey: (flight: Flight) => flight.id
 	})
