@@ -34,11 +34,12 @@ export default defineSchema({
 	aircraft: defineTable({
 		user_id: v.string(),
 		tail_number: v.string(), // e.g. "N839DN"
-		aircraft_type_id: v.string(), // references aircraft_types (string for Replicate compat)
+		aircraft_type_id: v.id('aircraft_types'),
 		notes: v.optional(v.string())
 	})
 		.index('by_user', ['user_id'])
-		.index('by_user_tail', ['user_id', 'tail_number']),
+		.index('by_user_tail', ['user_id', 'tail_number'])
+		.index('by_aircraft_type', ['aircraft_type_id']),
 
 	airports: defineTable({
 		user_id: v.optional(v.string()), // null = global reference data
@@ -58,8 +59,8 @@ export default defineSchema({
 		user_id: v.string(),
 		flight_date: v.string(), // "2024-03-15" plain date
 		flight_number: v.optional(v.string()), // e.g. "DL1234"
-		aircraft_id: v.optional(v.string()), // references aircraft
-		aircraft_type_id: v.optional(v.string()), // denormalized for quick display
+		aircraft_id: v.optional(v.id('aircraft')),
+		aircraft_type_id: v.optional(v.id('aircraft_types')), // denormalized from aircraft
 		dep_airport: v.optional(v.string()), // ICAO code
 		arr_airport: v.optional(v.string()), // ICAO code
 
@@ -85,4 +86,5 @@ export default defineSchema({
 	})
 		.index('by_user_date', ['user_id', 'flight_date'])
 		.index('by_user', ['user_id'])
+		.index('by_aircraft', ['aircraft_id'])
 });

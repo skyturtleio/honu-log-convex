@@ -38,7 +38,7 @@
 					<tr>
 						<td>{flight.flight_date}</td>
 						<td>{flight.flight_number ?? '--'}</td>
-						<td>{flight.aircraft_id ?? '--'}</td>
+						<td>{flight.tail_number ?? '--'}</td>
 						<td>
 							{#if flight.dep_airport && flight.arr_airport}
 								{flight.dep_airport} &rarr; {flight.arr_airport}

@@ -32,8 +32,20 @@ export const list = query({
 		const hasMore = flights.length > limit;
 		const page = hasMore ? flights.slice(0, limit) : flights;
 
+		// Resolve aircraft IDs to tail numbers
+		const enriched = await Promise.all(
+			page.map(async (flight) => {
+				let tail_number: string | undefined;
+				if (flight.aircraft_id) {
+					const aircraft = await ctx.db.get(flight.aircraft_id);
+					tail_number = aircraft?.tail_number;
+				}
+				return { ...flight, tail_number };
+			})
+		);
+
 		return {
-			flights: page,
+			flights: enriched,
 			hasMore,
 			cursor: hasMore ? page[page.length - 1]._id : undefined
 		};
@@ -56,8 +68,8 @@ export const create = mutation({
 	args: {
 		flight_date: v.string(),
 		flight_number: v.optional(v.string()),
-		aircraft_id: v.optional(v.string()),
-		aircraft_type_id: v.optional(v.string()),
+		aircraft_id: v.optional(v.id('aircraft')),
+		aircraft_type_id: v.optional(v.id('aircraft_types')),
 		dep_airport: v.optional(v.string()),
 		arr_airport: v.optional(v.string()),
 		time_out: v.optional(v.string()),
@@ -76,8 +88,20 @@ export const create = mutation({
 	},
 	handler: async (ctx, args) => {
 		const userId = await getUserId(ctx);
+
+		// Auto-populate aircraft_type_id from the selected aircraft
+		const { aircraft_type_id: argTypeId, ...rest } = args;
+		let aircraft_type_id = argTypeId;
+		if (args.aircraft_id && !aircraft_type_id) {
+			const aircraft = await ctx.db.get(args.aircraft_id);
+			if (aircraft && aircraft.user_id === userId) {
+				aircraft_type_id = aircraft.aircraft_type_id;
+			}
+		}
+
 		return await ctx.db.insert('flights', {
-			...args,
+			...rest,
+			...(aircraft_type_id ? { aircraft_type_id } : {}),
 			user_id: userId
 		});
 	}
@@ -88,8 +112,8 @@ export const update = mutation({
 		id: v.id('flights'),
 		flight_date: v.optional(v.string()),
 		flight_number: v.optional(v.string()),
-		aircraft_id: v.optional(v.string()),
-		aircraft_type_id: v.optional(v.string()),
+		aircraft_id: v.optional(v.id('aircraft')),
+		aircraft_type_id: v.optional(v.id('aircraft_types')),
 		dep_airport: v.optional(v.string()),
 		arr_airport: v.optional(v.string()),
 		time_out: v.optional(v.string()),

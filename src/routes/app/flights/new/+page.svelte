@@ -1,16 +1,28 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
-	import { useConvexClient } from 'convex-svelte';
+	import { useConvexClient, useQuery } from 'convex-svelte';
 	import { api } from '../../../../convex/_generated/api';
+	import type { Id } from '../../../../convex/_generated/dataModel';
 	import {
 		resolveOooiTimes,
 		calculateBlockTime,
 		formatDecimalHours,
 		parseDecimalHours
 	} from '$lib/flights/oooi';
+	import AircraftPicker from '$lib/components/AircraftPicker.svelte';
 
 	const client = useConvexClient();
+	const aircraftList = useQuery(api.aircraft.list, {});
+	const aircraftTypesList = useQuery(api.aircraft.listTypes, {});
+
+	async function createAircraft(tailNumber: string, aircraftTypeId: string): Promise<string> {
+		const id = await client.mutation(api.aircraft.create, {
+			tail_number: tailNumber,
+			aircraft_type_id: aircraftTypeId as Id<'aircraft_types'>
+		});
+		return id;
+	}
 
 	const now = new Date();
 	const todayUtc = now.toISOString().slice(0, 10);
@@ -111,7 +123,7 @@
 				landings,
 				approaches,
 				...(flightNumber ? { flight_number: flightNumber } : {}),
-				...(aircraftId ? { aircraft_id: aircraftId } : {}),
+				...(aircraftId ? { aircraft_id: aircraftId as Id<'aircraft'> } : {}),
 				...(depAirport ? { dep_airport: depAirport } : {}),
 				...(arrAirport ? { arr_airport: arrAirport } : {}),
 				...(resolved.time_out ? { time_out: resolved.time_out } : {}),
@@ -152,8 +164,13 @@
 			</div>
 
 			<div>
-				<label for="aircraft-id">Aircraft ID</label>
-				<input id="aircraft-id" type="text" bind:value={aircraftId} placeholder="N839DN" />
+				<label for="aircraft-id">Aircraft</label>
+				<AircraftPicker
+					aircraftList={aircraftList.data ?? []}
+					aircraftTypesList={aircraftTypesList.data ?? []}
+					bind:value={aircraftId}
+					oncreate={createAircraft}
+				/>
 			</div>
 
 			<div>
