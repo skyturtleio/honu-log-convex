@@ -1,7 +1,7 @@
 {
-  "database": "dolt",
-  "backend": "dolt",
-  "dolt_mode": "server",
-  "dolt_database": "honu_log_convex",
-  "project_id": "a5cb79c7-1acb-4013-9a5e-3d7db242d168"
+	"database": "dolt",
+	"backend": "dolt",
+	"dolt_mode": "server",
+	"dolt_database": "honu_log_convex",
+	"project_id": "a5cb79c7-1acb-4013-9a5e-3d7db242d168"
 }

@@ -8,7 +8,10 @@
  * @module
  */
 
+import type * as aircraft from "../aircraft.js";
+import type * as airports from "../airports.js";
 import type * as debug from "../debug.js";
+import type * as flights from "../flights.js";
 import type * as model_auth from "../model/auth.js";
 
 import type {
@@ -18,7 +21,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aircraft: typeof aircraft;
+  airports: typeof airports;
   debug: typeof debug;
+  flights: typeof flights;
   "model/auth": typeof model_auth;
 }>;
 

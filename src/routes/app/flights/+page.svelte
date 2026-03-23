@@ -1,38 +1,69 @@
 <script lang="ts">
-	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import { useQuery } from 'convex-svelte';
 	import { api } from '../../../convex/_generated/api';
 
-	let user = $derived(page.data.user);
-	const identity = useQuery(api.debug.whoami, {});
+	const flights = useQuery(api.flights.list, {});
+
+	function formatTime(minutes: number | undefined): string {
+		if (minutes == null) return '--';
+		return (minutes / 60).toFixed(1);
+	}
 </script>
 
-<h1>Flight Logbook</h1>
+<div>
+	<header style="display: flex; justify-content: space-between; align-items: center;">
+		<h1>Flights</h1>
+		<a href={resolve('/app/flights/new')}>New Flight</a>
+	</header>
 
-{#if user}
-	<section>
-		<h2>User Info (Server)</h2>
-		<ul>
-			{#each Object.entries(user) as [key, value] (key)}
-				<li>{key}: {value}</li>
-			{/each}
-		</ul>
-	</section>
-{/if}
+	{#if flights.isLoading}
+		<p>Loading flights...</p>
+	{:else if flights.error}
+		<p>Error loading flights: {flights.error.message}</p>
+	{:else if flights.data && flights.data.flights.length > 0}
+		<table>
+			<thead>
+				<tr>
+					<th>Date</th>
+					<th>Flight #</th>
+					<th>Aircraft</th>
+					<th>Route</th>
+					<th>Total Time</th>
+					<th>Actions</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each flights.data.flights as flight (flight._id)}
+					<tr>
+						<td>{flight.flight_date}</td>
+						<td>{flight.flight_number ?? '--'}</td>
+						<td>{flight.aircraft_id ?? '--'}</td>
+						<td>
+							{#if flight.dep_airport && flight.arr_airport}
+								{flight.dep_airport} &rarr; {flight.arr_airport}
+							{:else if flight.dep_airport}
+								{flight.dep_airport} &rarr; --
+							{:else if flight.arr_airport}
+								-- &rarr; {flight.arr_airport}
+							{:else}
+								--
+							{/if}
+						</td>
+						<td>{formatTime(flight.total_time)}</td>
+						<td>
+							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- dynamic route with ID -->
+							<a href={`/app/flights/${flight._id}`}>View</a>
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
 
-<section>
-	<h2>Convex Identity (debug.whoami)</h2>
-	{#if identity.isLoading}
-		<p>Loading Convex identity...</p>
-	{:else if identity.error}
-		<p>Error: {identity.error.message}</p>
-	{:else if identity.data}
-		<ul>
-			{#each Object.entries(identity.data) as [key, value] (key)}
-				<li>{key}: {JSON.stringify(value)}</li>
-			{/each}
-		</ul>
+		{#if flights.data.hasMore}
+			<p>Showing first page of results.</p>
+		{/if}
 	{:else}
-		<p>Not authenticated with Convex (whoami returned null)</p>
+		<p>No flights recorded yet. <a href={resolve('/app/flights/new')}>Add your first flight</a>.</p>
 	{/if}
-</section>
+</div>
