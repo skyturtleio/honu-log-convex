@@ -192,7 +192,8 @@
 						placeholder="2350"
 						maxlength="4"
 						inputmode="numeric"
-						pattern="\d{4}"
+						pattern="[0-9]{4}"
+						title="4-digit Zulu time, e.g. 0000"
 					/>
 				</div>
 
@@ -205,7 +206,8 @@
 						placeholder="0005"
 						maxlength="4"
 						inputmode="numeric"
-						pattern="\d{4}"
+						pattern="[0-9]{4}"
+						title="4-digit Zulu time, e.g. 0000"
 					/>
 				</div>
 
@@ -218,7 +220,8 @@
 						placeholder="0230"
 						maxlength="4"
 						inputmode="numeric"
-						pattern="\d{4}"
+						pattern="[0-9]{4}"
+						title="4-digit Zulu time, e.g. 0000"
 					/>
 				</div>
 
@@ -231,7 +234,8 @@
 						placeholder="0240"
 						maxlength="4"
 						inputmode="numeric"
-						pattern="\d{4}"
+						pattern="[0-9]{4}"
+						title="4-digit Zulu time, e.g. 0000"
 					/>
 				</div>
 			</fieldset>
