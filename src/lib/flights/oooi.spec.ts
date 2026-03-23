@@ -4,6 +4,8 @@ import {
 	resolveOooiTimes,
 	calculateBlockTime,
 	formatDecimalHours,
+	formatPlusMinutes,
+	parseDuration,
 	parseDecimalHours,
 	toZuluDisplay
 } from './oooi';
@@ -121,11 +123,63 @@ describe('formatDecimalHours', () => {
 	});
 });
 
-describe('parseDecimalHours', () => {
+describe('formatPlusMinutes', () => {
+	it('formats minutes as hours+minutes', () => {
+		expect(formatPlusMinutes(150)).toBe('2+30');
+		expect(formatPlusMinutes(126)).toBe('2+06');
+		expect(formatPlusMinutes(60)).toBe('1+00');
+		expect(formatPlusMinutes(0)).toBe('0+00');
+		expect(formatPlusMinutes(45)).toBe('0+45');
+	});
+
+	it('returns empty string for null/undefined', () => {
+		expect(formatPlusMinutes(null)).toBe('');
+		expect(formatPlusMinutes(undefined)).toBe('');
+	});
+});
+
+describe('parseDuration', () => {
+	it('parses decimal hours to minutes', () => {
+		expect(parseDuration('2.5')).toBe(150);
+		expect(parseDuration('1.0')).toBe(60);
+		expect(parseDuration('0')).toBe(0);
+	});
+
+	it('parses plus-minutes format to minutes', () => {
+		expect(parseDuration('2+06')).toBe(126);
+		expect(parseDuration('2+30')).toBe(150);
+		expect(parseDuration('0+45')).toBe(45);
+		expect(parseDuration('12+00')).toBe(720);
+		expect(parseDuration('1+5')).toBe(65);
+	});
+
+	it('rejects invalid plus-minutes', () => {
+		expect(parseDuration('2+60')).toBeNull();
+		expect(parseDuration('2+abc')).toBeNull();
+		expect(parseDuration('+30')).toBeNull();
+	});
+
+	it('returns null for invalid input', () => {
+		expect(parseDuration('')).toBeNull();
+		expect(parseDuration('abc')).toBeNull();
+		expect(parseDuration('-1')).toBeNull();
+	});
+
+	it('handles whitespace', () => {
+		expect(parseDuration('  2.5  ')).toBe(150);
+		expect(parseDuration('  2+06  ')).toBe(126);
+	});
+});
+
+describe('parseDecimalHours (deprecated, delegates to parseDuration)', () => {
 	it('parses decimal hours to minutes', () => {
 		expect(parseDecimalHours('2.5')).toBe(150);
 		expect(parseDecimalHours('1.0')).toBe(60);
 		expect(parseDecimalHours('0')).toBe(0);
+	});
+
+	it('also parses plus-minutes format', () => {
+		expect(parseDecimalHours('2+06')).toBe(126);
 	});
 
 	it('returns null for invalid input', () => {

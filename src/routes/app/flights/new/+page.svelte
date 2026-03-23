@@ -9,7 +9,7 @@
 		resolveOooiTimes,
 		calculateBlockTime,
 		formatDecimalHours,
-		parseDecimalHours
+		parseDuration
 	} from '$lib/flights/oooi';
 	import AircraftPicker from '$lib/components/AircraftPicker.svelte';
 
@@ -101,27 +101,27 @@
 
 			let totalMinutes: number | undefined;
 			if (totalTimeOverride && totalTimeInput) {
-				totalMinutes = parseDecimalHours(totalTimeInput) ?? undefined;
+				totalMinutes = parseDuration(totalTimeInput) ?? undefined;
 			} else if (blockMinutes != null) {
 				totalMinutes = blockMinutes;
 			}
 
 			let picMinutes: number | undefined;
 			if (picTimeOverride && picTimeInput) {
-				picMinutes = parseDecimalHours(picTimeInput) ?? undefined;
+				picMinutes = parseDuration(picTimeInput) ?? undefined;
 			} else {
 				picMinutes = totalMinutes;
 			}
 
-			const sicMinutes = sicTimeInput ? (parseDecimalHours(sicTimeInput) ?? undefined) : undefined;
+			const sicMinutes = sicTimeInput ? (parseDuration(sicTimeInput) ?? undefined) : undefined;
 			const nightMinutes = nightTimeInput
-				? (parseDecimalHours(nightTimeInput) ?? undefined)
+				? (parseDuration(nightTimeInput) ?? undefined)
 				: undefined;
 			const instrumentMinutes = instrumentTimeInput
-				? (parseDecimalHours(instrumentTimeInput) ?? undefined)
+				? (parseDuration(instrumentTimeInput) ?? undefined)
 				: undefined;
 			const crossCountryMinutes = crossCountryTimeInput
-				? (parseDecimalHours(crossCountryTimeInput) ?? undefined)
+				? (parseDuration(crossCountryTimeInput) ?? undefined)
 				: undefined;
 
 			const landings: Array<{ type: string; count: number }> = [];
@@ -278,70 +278,54 @@
 			</fieldset>
 
 			<div>
-				<label for="total-time">Total Time (decimal hours)</label>
+				<label for="total-time">Total Time</label>
 				<input
 					id="total-time"
 					type="text"
 					value={displayTotalTime}
 					oninput={handleTotalTimeInput}
-					placeholder="2.3"
-					inputmode="decimal"
+					placeholder="2.3 or 2+18"
 				/>
 			</div>
 
 			<div>
-				<label for="pic-time">PIC Time (decimal hours)</label>
+				<label for="pic-time">PIC Time</label>
 				<input
 					id="pic-time"
 					type="text"
 					value={displayPicTime}
 					oninput={handlePicTimeInput}
-					placeholder="2.3"
-					inputmode="decimal"
+					placeholder="2.3 or 2+18"
 				/>
 			</div>
 
 			<div>
-				<label for="sic-time">SIC Time (decimal hours)</label>
-				<input
-					id="sic-time"
-					type="text"
-					bind:value={sicTimeInput}
-					placeholder="0.0"
-					inputmode="decimal"
-				/>
+				<label for="sic-time">SIC Time</label>
+				<input id="sic-time" type="text" bind:value={sicTimeInput} placeholder="2.3 or 2+18" />
 			</div>
 
 			<div>
-				<label for="night-time">Night Time (decimal hours)</label>
-				<input
-					id="night-time"
-					type="text"
-					bind:value={nightTimeInput}
-					placeholder="0.0"
-					inputmode="decimal"
-				/>
+				<label for="night-time">Night Time</label>
+				<input id="night-time" type="text" bind:value={nightTimeInput} placeholder="2.3 or 2+18" />
 			</div>
 
 			<div>
-				<label for="instrument-time">Instrument Time (decimal hours)</label>
+				<label for="instrument-time">Instrument Time</label>
 				<input
 					id="instrument-time"
 					type="text"
 					bind:value={instrumentTimeInput}
-					placeholder="0.0"
-					inputmode="decimal"
+					placeholder="2.3 or 2+18"
 				/>
 			</div>
 
 			<div>
-				<label for="xc-time">Cross Country Time (decimal hours)</label>
+				<label for="xc-time">Cross Country Time</label>
 				<input
 					id="xc-time"
 					type="text"
 					bind:value={crossCountryTimeInput}
-					placeholder="0.0"
-					inputmode="decimal"
+					placeholder="2.3 or 2+18"
 				/>
 			</div>
 

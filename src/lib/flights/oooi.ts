@@ -105,12 +105,46 @@ export function formatDecimalHours(minutes: number | null | undefined): string {
 }
 
 /**
- * Parse decimal hours input to minutes (e.g. "2.3" → 138)
+ * Format minutes as hours+minutes for display (e.g. 135 → "2+15")
  */
-export function parseDecimalHours(input: string): number | null {
-	const num = parseFloat(input);
+export function formatPlusMinutes(minutes: number | null | undefined): string {
+	if (minutes == null) return '';
+	const h = Math.floor(minutes / 60);
+	const m = minutes % 60;
+	return `${h}+${m.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Parse duration input to minutes. Accepts:
+ * - Decimal hours: "2.3" → 138
+ * - Plus-minutes:  "2+06" → 126
+ */
+export function parseDuration(input: string): number | null {
+	const trimmed = input.trim();
+	if (!trimmed) return null;
+
+	// Reject if contains '+' but doesn't match plus-minutes format
+	if (trimmed.includes('+')) {
+		const plusMatch = trimmed.match(/^(\d+)\+(\d{1,2})$/);
+		if (!plusMatch) return null;
+		const hours = parseInt(plusMatch[1], 10);
+		const mins = parseInt(plusMatch[2], 10);
+		if (mins > 59) return null;
+		return hours * 60 + mins;
+	}
+
+	// Decimal hours: "2.3", "1.0", "0"
+	const num = parseFloat(trimmed);
 	if (isNaN(num) || num < 0) return null;
 	return Math.round(num * 60);
+}
+
+/**
+ * Parse decimal hours input to minutes (e.g. "2.3" → 138, "2+06" → 126)
+ * @deprecated Use parseDuration instead
+ */
+export function parseDecimalHours(input: string): number | null {
+	return parseDuration(input);
 }
 
 /**
