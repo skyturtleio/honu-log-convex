@@ -106,24 +106,22 @@
 				});
 			}
 
-			const args: Record<string, unknown> = {
+			await client.mutation(api.flights.create, {
 				flight_date: flightDate,
 				landings,
-				approaches
-			};
-			if (flightNumber) args.flight_number = flightNumber;
-			if (aircraftId) args.aircraft_id = aircraftId;
-			if (depAirport) args.dep_airport = depAirport;
-			if (arrAirport) args.arr_airport = arrAirport;
-			if (resolved.time_out) args.time_out = resolved.time_out;
-			if (resolved.time_off) args.time_off = resolved.time_off;
-			if (resolved.time_on) args.time_on = resolved.time_on;
-			if (resolved.time_in) args.time_in = resolved.time_in;
-			if (totalMinutes != null) args.total_time = totalMinutes;
-			if (picMinutes != null) args.pic_time = picMinutes;
-			if (remarks) args.remarks = remarks;
-
-			await client.mutation(api.flights.create, args as never);
+				approaches,
+				...(flightNumber ? { flight_number: flightNumber } : {}),
+				...(aircraftId ? { aircraft_id: aircraftId } : {}),
+				...(depAirport ? { dep_airport: depAirport } : {}),
+				...(arrAirport ? { arr_airport: arrAirport } : {}),
+				...(resolved.time_out ? { time_out: resolved.time_out } : {}),
+				...(resolved.time_off ? { time_off: resolved.time_off } : {}),
+				...(resolved.time_on ? { time_on: resolved.time_on } : {}),
+				...(resolved.time_in ? { time_in: resolved.time_in } : {}),
+				...(totalMinutes != null ? { total_time: totalMinutes } : {}),
+				...(picMinutes != null ? { pic_time: picMinutes } : {}),
+				...(remarks ? { remarks } : {})
+			});
 
 			await goto(resolve('/app/flights'));
 		} catch (err) {

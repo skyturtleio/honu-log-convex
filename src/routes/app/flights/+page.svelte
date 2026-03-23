@@ -52,8 +52,7 @@
 						</td>
 						<td>{formatTime(flight.total_time)}</td>
 						<td>
-							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- dynamic route with ID -->
-							<a href={`/app/flights/${flight._id}`}>View</a>
+							<a href={resolve(`/app/flights/${flight._id}` as `/app/flights`)}>View</a>
 						</td>
 					</tr>
 				{/each}
