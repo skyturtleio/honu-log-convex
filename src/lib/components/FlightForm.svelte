@@ -206,12 +206,36 @@
 
 	function handleTimeOutInput(e: Event) {
 		timeOut = (e.target as HTMLInputElement).value;
+		// Last-write-wins: editing Out means total should recalculate from block time
+		totalTimeOverride = false;
+		totalTimeInput = '';
 		clearFieldError('timeOut');
 	}
 
 	function handleTimeInInput(e: Event) {
 		timeIn = (e.target as HTMLInputElement).value;
+		// Last-write-wins: editing In means total should recalculate from block time
+		totalTimeOverride = false;
+		totalTimeInput = '';
 		clearFieldError('timeIn');
+	}
+
+	// When user focuses an inferred field, promote the inferred value so they can edit from it
+	// and clear the total override so total recalculates from block time
+	function handleTimeOutFocus() {
+		if (!timeOut && inferredTimeOut) {
+			timeOut = inferredTimeOut;
+			totalTimeOverride = false;
+			totalTimeInput = '';
+		}
+	}
+
+	function handleTimeInFocus() {
+		if (!timeIn && inferredTimeIn) {
+			timeIn = inferredTimeIn;
+			totalTimeOverride = false;
+			totalTimeInput = '';
+		}
 	}
 
 	function handleTotalTimeInput(e: Event) {
@@ -425,6 +449,7 @@
 					type="text"
 					value={displayTimeOut}
 					oninput={handleTimeOutInput}
+					onfocus={handleTimeOutFocus}
 					placeholder="2350"
 					maxlength="4"
 					inputmode="numeric"
@@ -469,6 +494,7 @@
 					type="text"
 					value={displayTimeIn}
 					oninput={handleTimeInInput}
+					onfocus={handleTimeInFocus}
 					placeholder="0240"
 					maxlength="4"
 					inputmode="numeric"
