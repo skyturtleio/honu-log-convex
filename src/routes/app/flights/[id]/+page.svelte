@@ -8,6 +8,7 @@
 	import { formatPlusMinutes, toZuluDisplay } from '$lib/flights/oooi';
 	import FlightForm from '$lib/components/FlightForm.svelte';
 	import type { FlightFormData } from '$lib/flights/validation';
+	import { createAircraft } from '$lib/aircraft/createAircraft';
 
 	const flightsStore = useCollection(flightsCollection.get());
 	const aircraftStore = useCollection(aircraftCollection.get());
@@ -26,17 +27,8 @@
 		}
 	});
 
-	function createAircraft(tailNumber: string): Promise<string> {
-		const now = Date.now();
-		const id = crypto.randomUUID();
-		aircraftCollection.get().insert({
-			id,
-			tail_number: tailNumber,
-			ownerId: page.data.user?.sub,
-			createdAt: now,
-			updatedAt: now
-		});
-		return Promise.resolve(id);
+	function handleCreateAircraft(tailNumber: string): Promise<string> {
+		return Promise.resolve(createAircraft(page.data.user?.sub, tailNumber));
 	}
 
 	let editing = $state(false);
@@ -113,7 +105,7 @@
 				_id: a.id,
 				tail_number: a.tail_number
 			}))}
-			oncreateaircraft={createAircraft}
+			oncreateaircraft={handleCreateAircraft}
 			onsave={handleSave}
 			oncancel={cancelEditing}
 			submitLabel="Save Changes"

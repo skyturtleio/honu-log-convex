@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import { aircraftCollection } from '../../../../collections/useAircraft';
+	import { createAircraft } from '$lib/aircraft/createAircraft';
 	import { getConvexClient } from '$lib/convex';
 	import { api } from '../../../../convex/_generated/api';
 
@@ -33,16 +33,9 @@
 		error = '';
 
 		try {
-			const now = Date.now();
-			const id = crypto.randomUUID();
-			aircraftCollection.get().insert({
-				id,
-				ownerId: page.data.user?.sub,
-				tail_number: tailNumber.toUpperCase(),
+			createAircraft(page.data.user?.sub, tailNumber, {
 				...(selectedTypeId ? { aircraft_type_id: selectedTypeId } : {}),
-				...(notes ? { notes } : {}),
-				createdAt: now,
-				updatedAt: now
+				...(notes ? { notes } : {})
 			});
 
 			await goto(resolve('/app/aircraft'));

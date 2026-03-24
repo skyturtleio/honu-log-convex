@@ -215,6 +215,103 @@ describe('inferZuluTime', () => {
 	});
 });
 
+describe('parseDuration round-trip with formatDecimalHours', () => {
+	it('decimal → minutes → decimal round-trips accurately', () => {
+		const mins = parseDuration('2.5');
+		expect(mins).toBe(150);
+		expect(formatDecimalHours(mins)).toBe('2.5');
+	});
+
+	it('plus-minutes → minutes → plus-minutes round-trips accurately', () => {
+		const mins = parseDuration('2+30');
+		expect(mins).toBe(150);
+		expect(formatPlusMinutes(mins)).toBe('2+30');
+	});
+
+	it('handles zero in both formats', () => {
+		expect(parseDuration('0')).toBe(0);
+		expect(parseDuration('0+00')).toBe(0);
+		expect(formatDecimalHours(0)).toBe('0.0');
+		expect(formatPlusMinutes(0)).toBe('0+00');
+	});
+
+	it('decimal rounding: 1.3 hours = 78 minutes', () => {
+		const mins = parseDuration('1.3');
+		expect(mins).toBe(78);
+		expect(formatDecimalHours(mins)).toBe('1.3');
+	});
+
+	it('decimal rounding: 1.1 hours = 66 minutes', () => {
+		const mins = parseDuration('1.1');
+		expect(mins).toBe(66);
+		expect(formatDecimalHours(mins)).toBe('1.1');
+	});
+});
+
+describe('edge case: very short and very long flights', () => {
+	it('zero-length flight (Out == In)', () => {
+		const resolved = resolveOooiTimes('2024-03-15', { out: '1200', in: '1200' });
+		const block = calculateBlockTime(resolved.time_out, resolved.time_in);
+		expect(block).toBe(0);
+	});
+
+	it('one-minute flight', () => {
+		const resolved = resolveOooiTimes('2024-03-15', { out: '1200', in: '1201' });
+		const block = calculateBlockTime(resolved.time_out, resolved.time_in);
+		expect(block).toBe(1);
+	});
+
+	it('long-haul flight (15+ hours, no midnight crossing)', () => {
+		const resolved = resolveOooiTimes('2024-03-15', { out: '0100', in: '1600' });
+		const block = calculateBlockTime(resolved.time_out, resolved.time_in);
+		expect(block).toBe(900); // 15 hours
+		expect(formatPlusMinutes(block)).toBe('15+00');
+		expect(formatDecimalHours(block)).toBe('15.0');
+	});
+
+	it('long-haul flight crossing midnight', () => {
+		const resolved = resolveOooiTimes('2024-03-15', { out: '1400', in: '0600' });
+		const block = calculateBlockTime(resolved.time_out, resolved.time_in);
+		expect(block).toBe(960); // 16 hours
+	});
+});
+
+describe('edge case: midnight boundary times', () => {
+	it('Out at exactly midnight (0000)', () => {
+		const resolved = resolveOooiTimes('2024-03-15', { out: '0000', in: '0200' });
+		expect(resolved.time_out).toBe('2024-03-15T00:00:00.000Z');
+		expect(calculateBlockTime(resolved.time_out, resolved.time_in)).toBe(120);
+	});
+
+	it('In at exactly midnight (0000 next day)', () => {
+		const resolved = resolveOooiTimes('2024-03-15', { out: '2200', in: '0000' });
+		expect(resolved.time_in).toBe('2024-03-16T00:00:00.000Z');
+		expect(calculateBlockTime(resolved.time_out, resolved.time_in)).toBe(120);
+	});
+
+	it('Out at 2359, In at 0001 (2-minute flight across midnight)', () => {
+		const resolved = resolveOooiTimes('2024-03-15', { out: '2359', in: '0001' });
+		expect(calculateBlockTime(resolved.time_out, resolved.time_in)).toBe(2);
+	});
+});
+
+describe('inferZuluTime edge cases', () => {
+	it('infer with zero minutes (no change)', () => {
+		expect(inferZuluTime('1200', 0, true)).toBe('1200');
+		expect(inferZuluTime('1200', 0, false)).toBe('1200');
+	});
+
+	it('infer full 24h (wraps back to same time)', () => {
+		expect(inferZuluTime('1200', 1440, true)).toBe('1200');
+		expect(inferZuluTime('1200', 1440, false)).toBe('1200');
+	});
+
+	it('infer just under 24h', () => {
+		expect(inferZuluTime('1200', 1439, true)).toBe('1159');
+		expect(inferZuluTime('1200', 1439, false)).toBe('1201');
+	});
+});
+
 describe('toZuluDisplay', () => {
 	it('extracts 4-digit Zulu from ISO string', () => {
 		expect(toZuluDisplay('2024-03-15T23:50:00.000Z')).toBe('2350');

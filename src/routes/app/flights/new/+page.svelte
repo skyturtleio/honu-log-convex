@@ -6,21 +6,13 @@
 	import { aircraftCollection } from '../../../../collections/useAircraft';
 	import { useCollection } from '$lib/useCollection.svelte';
 	import FlightForm from '$lib/components/FlightForm.svelte';
+	import { createAircraft } from '$lib/aircraft/createAircraft';
 	import type { FlightFormData } from '$lib/flights/validation';
 
 	const aircraftStore = useCollection(aircraftCollection.get());
 
-	async function createAircraft(tailNumber: string): Promise<string> {
-		const now = Date.now();
-		const id = crypto.randomUUID();
-		aircraftCollection.get().insert({
-			id,
-			tail_number: tailNumber,
-			ownerId: page.data.user?.sub,
-			createdAt: now,
-			updatedAt: now
-		});
-		return id;
+	async function handleCreateAircraft(tailNumber: string): Promise<string> {
+		return createAircraft(page.data.user?.sub, tailNumber);
 	}
 
 	async function handleSave(data: FlightFormData) {
@@ -42,7 +34,7 @@
 
 	<FlightForm
 		aircraftList={aircraftStore.data.map((a) => ({ _id: a.id, tail_number: a.tail_number }))}
-		oncreateaircraft={createAircraft}
+		oncreateaircraft={handleCreateAircraft}
 		onsave={handleSave}
 	/>
 

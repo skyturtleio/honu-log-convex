@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Flight } from '../../collections/useFlights';
 	import type { FlightFormData, FlightFormInput } from '$lib/flights/validation';
-	import { flightFormSchema, validateCrossField } from '$lib/flights/validation';
+	import { flightFormSchema, validateCrossField, clampPicTime } from '$lib/flights/validation';
 	import {
 		resolveOooiTimes,
 		calculateBlockTime,
@@ -146,6 +146,16 @@
 	const displayPicTime = $derived(
 		picTimeOverride ? picTimeInput : formatPlusMinutes(effectiveTotalMinutes)
 	);
+
+	// --- PIC clamping: PIC must never exceed total ---
+	$effect(() => {
+		if (picTimeOverride && picTimeInput && displayTotalTime) {
+			const clamped = clampPicTime(picTimeInput, displayTotalTime);
+			if (clamped !== null) {
+				picTimeInput = clamped;
+			}
+		}
+	});
 
 	// --- Smart time inference ---
 

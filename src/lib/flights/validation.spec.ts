@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { flightFormSchema, validateCrossField, type FlightFormInput } from './validation';
+import {
+	flightFormSchema,
+	validateCrossField,
+	clampPicTime,
+	type FlightFormInput
+} from './validation';
 
 function makeInput(overrides: Partial<FlightFormInput> = {}): FlightFormInput {
 	return {
@@ -97,5 +102,79 @@ describe('validateCrossField', () => {
 	it('returns no warnings when total is empty', () => {
 		const warnings = validateCrossField(makeInput({ picTimeInput: '5+00' }));
 		expect(warnings).toEqual([]);
+	});
+});
+
+describe('PIC time validation (bead 82p)', () => {
+	it('PIC defaults to total (no warning when equal)', () => {
+		// When PIC == Total, no warning
+		const warnings = validateCrossField(
+			makeInput({ totalTimeInput: '2+30', picTimeInput: '2+30' })
+		);
+		expect(warnings).toEqual([]);
+	});
+
+	it('PIC can be lower than total (no warning)', () => {
+		const warnings = validateCrossField(
+			makeInput({ totalTimeInput: '2+30', picTimeInput: '1+00' })
+		);
+		expect(warnings).toEqual([]);
+	});
+
+	it('PIC exceeding total produces warning', () => {
+		const warnings = validateCrossField(
+			makeInput({ totalTimeInput: '2+00', picTimeInput: '3+00' })
+		);
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]).toContain('PIC time');
+		expect(warnings[0]).toContain('exceeds total');
+	});
+
+	it('PIC exceeding total by 1 minute produces warning', () => {
+		const warnings = validateCrossField(makeInput({ totalTimeInput: '2+00', picTimeInput: '2.1' }));
+		// 2.1 hours = 126 min, 2+00 = 120 min → 126 > 120 → warning
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]).toContain('PIC time');
+	});
+
+	it('no PIC warning when PIC is empty (defaults to total)', () => {
+		const warnings = validateCrossField(makeInput({ totalTimeInput: '2+30', picTimeInput: '' }));
+		expect(warnings).toEqual([]);
+	});
+
+	it('SIC alone does not trigger PIC warning', () => {
+		const warnings = validateCrossField(
+			makeInput({ totalTimeInput: '2+00', sicTimeInput: '3+00' })
+		);
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]).toContain('SIC time');
+		expect(warnings[0]).not.toContain('PIC');
+	});
+});
+
+describe('clampPicTime', () => {
+	it('returns null when PIC <= total (no clamping needed)', () => {
+		expect(clampPicTime('2+00', '2+30')).toBeNull();
+		expect(clampPicTime('2+30', '2+30')).toBeNull();
+	});
+
+	it('clamps PIC to total when PIC > total', () => {
+		expect(clampPicTime('3+00', '2+30')).toBe('2+30');
+	});
+
+	it('clamps with decimal format inputs', () => {
+		// PIC=3.0 (180min) > Total=2.5 (150min) → clamp to 2+30
+		expect(clampPicTime('3.0', '2.5')).toBe('2+30');
+	});
+
+	it('returns null for empty/invalid inputs', () => {
+		expect(clampPicTime('', '2+30')).toBeNull();
+		expect(clampPicTime('2+00', '')).toBeNull();
+		expect(clampPicTime('abc', '2+30')).toBeNull();
+		expect(clampPicTime('2+00', 'xyz')).toBeNull();
+	});
+
+	it('clamps to zero when total is zero', () => {
+		expect(clampPicTime('1+00', '0')).toBe('0+00');
 	});
 });

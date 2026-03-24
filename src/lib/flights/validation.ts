@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { parseZulu, parseDuration } from './oooi';
+import { parseZulu, parseDuration, formatPlusMinutes } from './oooi';
 
 const zuluTime = z
 	.string()
@@ -66,6 +66,21 @@ export function validateCrossField(input: FlightFormInput): string[] {
 	}
 
 	return warnings;
+}
+
+/**
+ * Clamp PIC time to never exceed total time.
+ * Returns the clamped value in plus-minutes format, or null if no clamping needed.
+ * Used by FlightForm to auto-correct PIC when total decreases.
+ */
+export function clampPicTime(picInput: string, totalInput: string): string | null {
+	const picMins = parseDuration(picInput);
+	const totalMins = parseDuration(totalInput);
+	if (picMins == null || totalMins == null) return null;
+	if (picMins > totalMins) {
+		return formatPlusMinutes(totalMins);
+	}
+	return null;
 }
 
 /** Data returned from FlightForm after parsing, ready for insert/update. */
