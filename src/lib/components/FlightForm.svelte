@@ -11,6 +11,7 @@
 		inferZuluTime
 	} from '$lib/flights/oooi';
 	import AircraftPicker from './AircraftPicker.svelte';
+	import AirportPicker from './AirportPicker.svelte';
 
 	interface Props {
 		flight?: Flight;
@@ -425,27 +426,13 @@
 
 		<div>
 			<label for="dep-airport">From</label>
-			<input
-				id="dep-airport"
-				type="text"
-				bind:value={depAirport}
-				placeholder="KATL"
-				maxlength="4"
-				style="text-transform: uppercase;"
-			/>
+			<AirportPicker bind:value={depAirport} placeholder="KATL" />
 			{#if fieldErrors.depAirport}<small style="color: red;">{fieldErrors.depAirport}</small>{/if}
 		</div>
 
 		<div>
 			<label for="arr-airport">To</label>
-			<input
-				id="arr-airport"
-				type="text"
-				bind:value={arrAirport}
-				placeholder="KJFK"
-				maxlength="4"
-				style="text-transform: uppercase;"
-			/>
+			<AirportPicker bind:value={arrAirport} placeholder="KJFK" />
 			{#if fieldErrors.arrAirport}<small style="color: red;">{fieldErrors.arrAirport}</small>{/if}
 		</div>
 
