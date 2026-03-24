@@ -24,7 +24,9 @@
 
 	function formatTime(minutes: number | undefined): string {
 		if (minutes == null) return '--';
-		return (minutes / 60).toFixed(1);
+		const h = Math.floor(minutes / 60);
+		const m = minutes % 60;
+		return `${h}+${m.toString().padStart(2, '0')}`;
 	}
 
 	async function handleDelete(id: string) {

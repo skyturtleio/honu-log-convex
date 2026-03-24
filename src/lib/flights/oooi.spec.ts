@@ -7,7 +7,8 @@ import {
 	formatPlusMinutes,
 	parseDuration,
 	parseDecimalHours,
-	toZuluDisplay
+	toZuluDisplay,
+	inferZuluTime
 } from './oooi';
 
 describe('parseZulu', () => {
@@ -186,6 +187,31 @@ describe('parseDecimalHours (deprecated, delegates to parseDuration)', () => {
 		expect(parseDecimalHours('')).toBeNull();
 		expect(parseDecimalHours('abc')).toBeNull();
 		expect(parseDecimalHours('-1')).toBeNull();
+	});
+});
+
+describe('inferZuluTime', () => {
+	it('adds minutes to a Zulu time (Out + Total → In)', () => {
+		expect(inferZuluTime('2350', 170, true)).toBe('0240'); // midnight crossing
+		expect(inferZuluTime('1200', 150, true)).toBe('1430');
+		expect(inferZuluTime('0000', 60, true)).toBe('0100');
+	});
+
+	it('subtracts minutes from a Zulu time (In - Total → Out)', () => {
+		expect(inferZuluTime('0240', 170, false)).toBe('2350'); // reverse midnight crossing
+		expect(inferZuluTime('1430', 150, false)).toBe('1200');
+		expect(inferZuluTime('0100', 60, false)).toBe('0000');
+	});
+
+	it('handles wrap-around correctly', () => {
+		expect(inferZuluTime('2300', 120, true)).toBe('0100'); // 23:00 + 2h = 01:00
+		expect(inferZuluTime('0030', 60, false)).toBe('2330'); // 00:30 - 1h = 23:30
+	});
+
+	it('returns null for invalid input', () => {
+		expect(inferZuluTime('', 60, true)).toBeNull();
+		expect(inferZuluTime('bad', 60, true)).toBeNull();
+		expect(inferZuluTime('2500', 60, true)).toBeNull();
 	});
 });
 

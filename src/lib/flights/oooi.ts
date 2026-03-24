@@ -148,6 +148,22 @@ export function parseDecimalHours(input: string): number | null {
 }
 
 /**
+ * Infer a Zulu time by adding or subtracting minutes from a base Zulu string.
+ * Used for smart time inference: Out+Total→In (add), In+Total→Out (subtract).
+ * Returns 4-digit Zulu string or null if base is invalid.
+ */
+export function inferZuluTime(baseZulu: string, minutes: number, add: boolean): string | null {
+	const parsed = parseZulu(baseZulu);
+	if (!parsed) return null;
+	const baseMinutes = parsed.hours * 60 + parsed.minutes;
+	let result = add ? baseMinutes + minutes : baseMinutes - minutes;
+	result = ((result % 1440) + 1440) % 1440;
+	const h = Math.floor(result / 60);
+	const m = result % 60;
+	return h.toString().padStart(2, '0') + m.toString().padStart(2, '0');
+}
+
+/**
  * Extract 4-digit Zulu display from ISO 8601 string (e.g. "2024-03-15T23:50:00.000Z" → "2350")
  */
 export function toZuluDisplay(iso?: string): string {
