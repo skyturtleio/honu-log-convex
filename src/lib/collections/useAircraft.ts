@@ -1,11 +1,11 @@
 import { collection } from '@trestleinc/replicate/client';
-import { api } from '../convex/_generated/api';
+import { api } from '../../convex/_generated/api';
 import { createPersistence } from '$lib/persistence';
 import { getConvexClient } from '$lib/convex';
-import { aircraftSchema, type Aircraft } from '../schemas/aircraft';
+import { aircraftSchema, type Aircraft } from '../../schemas/aircraft';
 
 export { aircraftSchema };
-export type { Aircraft } from '../schemas/aircraft';
+export type { Aircraft } from '../../schemas/aircraft';
 
 export const aircraftCollection = collection.create({
 	persistence: createPersistence,

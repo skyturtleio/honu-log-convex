@@ -25,9 +25,7 @@ function makeInput(overrides: Partial<FlightFormInput> = {}): FlightFormInput {
 		crossCountryTimeInput: '',
 		dayLandings: 0,
 		nightLandings: 0,
-		approachType: '',
-		approachRunway: '',
-		approachAirport: '',
+		approaches: [],
 		remarks: '',
 		...overrides
 	};

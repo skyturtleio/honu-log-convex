@@ -31,9 +31,13 @@ export const flightFormSchema = z.object({
 	crossCountryTimeInput: duration,
 	dayLandings: z.number().int().min(0, 'Must be 0 or more'),
 	nightLandings: z.number().int().min(0, 'Must be 0 or more'),
-	approachType: z.string(),
-	approachRunway: z.string(),
-	approachAirport: z.string(),
+	approaches: z.array(
+		z.object({
+			type: z.string(),
+			runway: z.string(),
+			airport: z.string()
+		})
+	),
 	remarks: z.string()
 });
 

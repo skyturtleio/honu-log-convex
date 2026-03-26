@@ -1,46 +1,18 @@
 import { replicate } from '@trestleinc/replicate/server';
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import type { GenericMutationCtx, GenericQueryCtx, GenericDataModel } from 'convex/server';
 import { components } from './_generated/api';
 import { getUserId } from './model/auth';
+import { ownerIsolatedHooks } from './model/replicateAuth';
 import type { Aircraft } from './types';
 
 const r = replicate(components.replicate);
-
-async function requireAuth(
-	ctx: GenericQueryCtx<GenericDataModel> | GenericMutationCtx<GenericDataModel>
-) {
-	const identity = await ctx.auth.getUserIdentity();
-	if (!identity) throw new Error('Not authenticated');
-	return identity;
-}
 
 // --- Replicate-managed aircraft collection ---
 
 const _aircraft = r<Aircraft>({
 	collection: 'aircraft',
-	hooks: {
-		evalRead: async (ctx) => {
-			await requireAuth(ctx);
-		},
-		evalWrite: async (ctx, doc) => {
-			const identity = await requireAuth(ctx);
-			if (doc.ownerId && doc.ownerId !== identity.subject) {
-				throw new Error("Forbidden: cannot write another user's aircraft");
-			}
-		},
-		evalRemove: async (ctx, docId) => {
-			const identity = await requireAuth(ctx);
-			const existing = await (ctx as GenericMutationCtx<GenericDataModel>).db
-				.query('aircraft')
-				.withIndex('by_doc_id', (q) => q.eq('id', docId))
-				.first();
-			if (existing && existing.ownerId && existing.ownerId !== identity.subject) {
-				throw new Error("Forbidden: cannot delete another user's aircraft");
-			}
-		}
-	}
+	hooks: ownerIsolatedHooks('aircraft', 'aircraft')
 });
 
 export const { stream, material, recovery, insert, update, remove, mark, compact } = _aircraft;

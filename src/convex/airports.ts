@@ -50,6 +50,24 @@ export const search = query({
 			}
 		}
 
+		if (combined.length >= limit) return combined.slice(0, limit);
+
+		// Also search by name (full-text)
+		const byName = await ctx.db
+			.query('airports')
+			.withSearchIndex('search_name', (s) => s.search('name', args.query))
+			.take(limit);
+
+		for (const a of byName) {
+			if (!seen.has(a._id)) {
+				// Only include global or user-owned airports
+				if (a.user_id === undefined || a.user_id === userId) {
+					combined.push(a);
+					seen.add(a._id);
+				}
+			}
+		}
+
 		return combined.slice(0, limit);
 	}
 });

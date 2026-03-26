@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
-	import { flightsCollection } from '../../../collections/useFlights';
-	import { aircraftCollection } from '../../../collections/useAircraft';
+	import { flightsCollection } from '$lib/collections/useFlights';
+	import { aircraftCollection } from '$lib/collections/useAircraft';
 	import { useCollection } from '$lib/useCollection.svelte';
+	import { errorMessage } from '$lib/errorMessage';
 
 	let deletingId = $state<string | null>(null);
 	let error = $state('');
@@ -34,7 +35,7 @@
 			error = '';
 			await flightsCollection.get().delete(id);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to delete flight';
+			error = errorMessage(e, 'Failed to delete flight');
 		} finally {
 			deletingId = null;
 		}

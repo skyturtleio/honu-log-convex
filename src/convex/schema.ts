@@ -102,4 +102,5 @@ export default defineSchema({
 		.index('by_icao', ['icao'])
 		.index('by_iata', ['iata'])
 		.index('by_user', ['user_id'])
+		.searchIndex('search_name', { searchField: 'name', filterFields: ['user_id'] })
 });

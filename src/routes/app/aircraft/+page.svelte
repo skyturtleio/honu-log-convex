@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
-	import { aircraftCollection } from '../../../collections/useAircraft';
-	import type { Aircraft } from '../../../collections/useAircraft';
+	import { aircraftCollection } from '$lib/collections/useAircraft';
+	import type { Aircraft } from '$lib/collections/useAircraft';
 	import { useCollection } from '$lib/useCollection.svelte';
 	import { getConvexClient } from '$lib/convex';
 	import { api } from '../../../convex/_generated/api';
+	import { formatAircraftType } from '$lib/aircraft/formatAircraftType';
+	import { errorMessage } from '$lib/errorMessage';
 
 	const aircraftStore = useCollection(aircraftCollection.get());
 
@@ -33,9 +35,7 @@
 
 	function formatType(typeId: string | undefined): string {
 		if (!typeId) return '--';
-		const t = typesById.get(typeId);
-		if (!t) return '--';
-		return `${t.designator} - ${t.make} ${t.model}`;
+		return formatAircraftType(typesById.get(typeId));
 	}
 
 	function startEdit(ac: Aircraft) {
@@ -65,7 +65,7 @@
 			});
 			editingId = null;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to save changes';
+			error = errorMessage(err, 'Failed to save changes');
 		} finally {
 			saving = false;
 		}
@@ -79,7 +79,7 @@
 		try {
 			aircraftCollection.get().delete(id);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to delete aircraft';
+			error = errorMessage(err, 'Failed to delete aircraft');
 		} finally {
 			deleting = null;
 		}
@@ -122,7 +122,7 @@
 								<select bind:value={editAircraftTypeId}>
 									<option value="">-- None --</option>
 									{#each aircraftTypes as t (t._id)}
-										<option value={t._id}>{t.designator} - {t.make} {t.model}</option>
+										<option value={t._id}>{formatAircraftType(t)}</option>
 									{/each}
 								</select>
 							</td>

@@ -3,8 +3,8 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { getConvexClient } from '$lib/convex';
-	import { flightsCollection } from '../collections/useFlights';
-	import { aircraftCollection } from '../collections/useAircraft';
+	import { flightsCollection } from '$lib/collections/useFlights';
+	import { aircraftCollection } from '$lib/collections/useAircraft';
 
 	let { children } = $props();
 

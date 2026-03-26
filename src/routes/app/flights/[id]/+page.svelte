@@ -2,13 +2,14 @@
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { flightsCollection } from '../../../../collections/useFlights';
-	import { aircraftCollection } from '../../../../collections/useAircraft';
+	import { flightsCollection } from '$lib/collections/useFlights';
+	import { aircraftCollection } from '$lib/collections/useAircraft';
 	import { useCollection } from '$lib/useCollection.svelte';
 	import { formatPlusMinutes, toZuluDisplay } from '$lib/flights/oooi';
 	import FlightForm from '$lib/components/FlightForm.svelte';
 	import type { FlightFormData } from '$lib/flights/validation';
 	import { createAircraft } from '$lib/aircraft/createAircraft';
+	import { errorMessage } from '$lib/errorMessage';
 
 	const flightsStore = useCollection(flightsCollection.get());
 	const aircraftStore = useCollection(aircraftCollection.get());
@@ -81,7 +82,7 @@
 			flightsCollection.get().delete(flightId);
 			await goto(resolve('/app/flights'));
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to delete flight';
+			error = errorMessage(err, 'Failed to delete flight');
 			deleting = false;
 		}
 	}

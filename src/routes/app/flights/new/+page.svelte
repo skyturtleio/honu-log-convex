@@ -2,8 +2,8 @@
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { flightsCollection } from '../../../../collections/useFlights';
-	import { aircraftCollection } from '../../../../collections/useAircraft';
+	import { flightsCollection } from '$lib/collections/useFlights';
+	import { aircraftCollection } from '$lib/collections/useAircraft';
 	import { useCollection } from '$lib/useCollection.svelte';
 	import FlightForm from '$lib/components/FlightForm.svelte';
 	import { createAircraft } from '$lib/aircraft/createAircraft';

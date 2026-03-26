@@ -1,4 +1,4 @@
-import { aircraftCollection } from '../../collections/useAircraft';
+import { aircraftCollection } from '$lib/collections/useAircraft';
 
 /**
  * Create a new aircraft in the local CRDT collection.

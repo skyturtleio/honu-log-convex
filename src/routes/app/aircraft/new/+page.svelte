@@ -6,6 +6,8 @@
 	import { createAircraft } from '$lib/aircraft/createAircraft';
 	import { getConvexClient } from '$lib/convex';
 	import { api } from '../../../../convex/_generated/api';
+	import { formatAircraftType } from '$lib/aircraft/formatAircraftType';
+	import { errorMessage } from '$lib/errorMessage';
 
 	let aircraftTypes = $state<
 		Array<{ _id: string; designator: string; make: string; model: string }>
@@ -40,7 +42,7 @@
 
 			await goto(resolve('/app/aircraft'));
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to create aircraft';
+			error = errorMessage(err, 'Failed to create aircraft');
 		} finally {
 			submitting = false;
 		}
@@ -73,7 +75,7 @@
 				<select id="aircraft-type" bind:value={selectedTypeId}>
 					<option value="">Select a type...</option>
 					{#each aircraftTypes as t (t._id)}
-						<option value={t._id}>{t.designator} - {t.make} {t.model}</option>
+						<option value={t._id}>{formatAircraftType(t)}</option>
 					{/each}
 				</select>
 			</div>

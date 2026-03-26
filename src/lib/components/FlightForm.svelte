@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Flight } from '../../collections/useFlights';
+	import type { Flight } from '$lib/collections/useFlights';
 	import type { FlightFormData, FlightFormInput } from '$lib/flights/validation';
 	import { flightFormSchema, validateCrossField, clampPicTime } from '$lib/flights/validation';
 	import {
@@ -13,6 +13,7 @@
 	} from '$lib/flights/oooi';
 	import { getConvexClient } from '$lib/convex';
 	import { api } from '../../convex/_generated/api';
+	import { errorMessage } from '$lib/errorMessage';
 	import AircraftPicker from './AircraftPicker.svelte';
 	import AirportPicker from './AirportPicker.svelte';
 
@@ -60,9 +61,9 @@
 	let dayLandings = $state(0);
 	let nightLandings = $state(0);
 
-	let approachType = $state('');
-	let approachRunway = $state('');
-	let approachAirport = $state('');
+	let approaches = $state<Array<{ type: string; runway: string; airport: string }>>([
+		{ type: '', runway: '', airport: '' }
+	]);
 
 	let remarks = $state('');
 
@@ -153,10 +154,10 @@
 		dayLandings = dayEntry?.count ?? 0;
 		nightLandings = nightEntry?.count ?? 0;
 
-		const firstApproach = data.approaches?.[0];
-		approachType = firstApproach?.type ?? '';
-		approachRunway = firstApproach?.runway ?? '';
-		approachAirport = firstApproach?.airport ?? '';
+		approaches =
+			data.approaches && data.approaches.length > 0
+				? data.approaches.map((a) => ({ ...a }))
+				: [{ type: '', runway: '', airport: '' }];
 
 		remarks = data.remarks ?? '';
 		fieldErrors = {};
@@ -257,12 +258,20 @@
 			crossCountryTimeInput,
 			dayLandings,
 			nightLandings,
-			approachType,
-			approachRunway,
-			approachAirport,
+			approaches,
 			remarks
 		})
 	);
+
+	// --- Approach handlers ---
+
+	function addApproach() {
+		approaches = [...approaches, { type: '', runway: '', airport: '' }];
+	}
+
+	function removeApproach(index: number) {
+		approaches = approaches.filter((_, i) => i !== index);
+	}
 
 	// --- Input handlers ---
 
@@ -348,9 +357,7 @@
 			crossCountryTimeInput,
 			dayLandings,
 			nightLandings,
-			approachType,
-			approachRunway,
-			approachAirport,
+			approaches,
 			remarks
 		};
 
@@ -408,15 +415,12 @@
 			if (dayLandings > 0) landings.push({ type: 'day', count: dayLandings });
 			if (nightLandings > 0) landings.push({ type: 'night', count: nightLandings });
 
-			const approaches: Array<{ type: string; runway: string; airport: string }> = [];
-			if (approachType || approachRunway || approachAirport) {
-				approaches.push({ type: approachType, runway: approachRunway, airport: approachAirport });
-			}
+			const filteredApproaches = approaches.filter((a) => a.type || a.runway || a.airport);
 
 			const data: FlightFormData = {
 				flight_date: flightDate,
 				landings,
-				approaches,
+				approaches: filteredApproaches,
 				...(flightNumber ? { flight_number: flightNumber } : {}),
 				...(aircraftId ? { aircraft_id: aircraftId } : {}),
 				...(depAirport ? { dep_airport: depAirport } : {}),
@@ -436,7 +440,7 @@
 
 			await onsave(data);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to save flight';
+			error = errorMessage(err, 'Failed to save flight');
 		} finally {
 			submitting = false;
 		}
@@ -664,26 +668,42 @@
 		<fieldset>
 			<legend>Approaches</legend>
 
-			<div>
-				<label for="approach-type">Type</label>
-				<input id="approach-type" type="text" bind:value={approachType} placeholder="ILS" />
-			</div>
+			{#each approaches as approach, i (i)}
+				<div class="approach-row">
+					<div>
+						<label for="approach-type-{i}">Type</label>
+						<input
+							id="approach-type-{i}"
+							type="text"
+							bind:value={approach.type}
+							placeholder="ILS"
+						/>
+					</div>
 
-			<div>
-				<label for="approach-runway">Runway</label>
-				<input id="approach-runway" type="text" bind:value={approachRunway} placeholder="27L" />
-			</div>
+					<div>
+						<label for="approach-runway-{i}">Runway</label>
+						<input
+							id="approach-runway-{i}"
+							type="text"
+							bind:value={approach.runway}
+							placeholder="27L"
+						/>
+					</div>
 
-			<div>
-				<label for="approach-airport">Airport</label>
-				<input
-					id="approach-airport"
-					type="text"
-					bind:value={approachAirport}
-					placeholder="KJFK"
-					maxlength="4"
-				/>
-			</div>
+					<div>
+						<label for="approach-airport-{i}">Airport</label>
+						<AirportPicker bind:value={approach.airport} placeholder="KJFK" />
+					</div>
+
+					{#if approaches.length > 1}
+						<button type="button" class="remove-approach" onclick={() => removeApproach(i)}>
+							Remove
+						</button>
+					{/if}
+				</div>
+			{/each}
+
+			<button type="button" onclick={addApproach}>Add Approach</button>
 		</fieldset>
 
 		<div>
@@ -711,5 +731,18 @@
 		color: #666;
 		font-size: 0.85em;
 		margin-left: 0.5em;
+	}
+	.approach-row {
+		margin-bottom: 0.5rem;
+		padding-bottom: 0.5rem;
+		border-bottom: 1px solid #eee;
+	}
+	.remove-approach {
+		font-size: 0.85em;
+		color: #c00;
+		background: none;
+		border: 1px solid #ccc;
+		cursor: pointer;
+		margin-top: 0.25rem;
 	}
 </style>
