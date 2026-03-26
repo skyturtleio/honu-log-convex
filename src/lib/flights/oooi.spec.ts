@@ -8,7 +8,8 @@ import {
 	parseDuration,
 	parseDecimalHours,
 	toZuluDisplay,
-	inferZuluTime
+	inferZuluTime,
+	formatLocalTime
 } from './oooi';
 
 describe('parseZulu', () => {
@@ -322,5 +323,37 @@ describe('toZuluDisplay', () => {
 		expect(toZuluDisplay('')).toBe('');
 		expect(toZuluDisplay(undefined)).toBe('');
 		expect(toZuluDisplay('not-a-date')).toBe('');
+	});
+});
+
+describe('formatLocalTime', () => {
+	it('converts UTC to Eastern time', () => {
+		// 1122Z on a winter date → 0622 EST
+		const result = formatLocalTime('1122', '2024-01-15', 'America/New_York');
+		expect(result).toBe('0622 EST');
+	});
+
+	it('handles DST correctly', () => {
+		// 1122Z on a summer date → 0722 EDT
+		const result = formatLocalTime('1122', '2024-07-15', 'America/New_York');
+		expect(result).toBe('0722 EDT');
+	});
+
+	it('handles Pacific timezone', () => {
+		const result = formatLocalTime('2000', '2024-01-15', 'America/Los_Angeles');
+		expect(result).toBe('1200 PST');
+	});
+
+	it('returns null for invalid Zulu time', () => {
+		expect(formatLocalTime('', '2024-01-15', 'America/New_York')).toBeNull();
+		expect(formatLocalTime('abcd', '2024-01-15', 'America/New_York')).toBeNull();
+	});
+
+	it('returns null for invalid timezone', () => {
+		expect(formatLocalTime('1122', '2024-01-15', 'Invalid/Timezone')).toBeNull();
+	});
+
+	it('returns null for invalid date', () => {
+		expect(formatLocalTime('1122', 'bad-date', 'America/New_York')).toBeNull();
 	});
 });

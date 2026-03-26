@@ -8,8 +8,11 @@
 		formatPlusMinutes,
 		parseDuration,
 		toZuluDisplay,
-		inferZuluTime
+		inferZuluTime,
+		formatLocalTime
 	} from '$lib/flights/oooi';
+	import { getConvexClient } from '$lib/convex';
+	import { api } from '../../convex/_generated/api';
 	import AircraftPicker from './AircraftPicker.svelte';
 	import AirportPicker from './AirportPicker.svelte';
 
@@ -66,6 +69,40 @@
 	let submitting = $state(false);
 	let error = $state('');
 	let fieldErrors = $state<Record<string, string>>({});
+
+	// Airport timezone data for local time display
+	let depTimezone = $state<string | undefined>();
+	let arrTimezone = $state<string | undefined>();
+
+	// Fetch departure airport timezone when ICAO changes
+	$effect(() => {
+		const icao = depAirport;
+		if (!icao || icao.length !== 4) {
+			depTimezone = undefined;
+			return;
+		}
+		getConvexClient()
+			.query(api.airports.getByIcao, { icao })
+			.then((airport) => {
+				if (depAirport === icao) depTimezone = airport?.timezone;
+			})
+			.catch(() => {});
+	});
+
+	// Fetch arrival airport timezone when ICAO changes
+	$effect(() => {
+		const icao = arrAirport;
+		if (!icao || icao.length !== 4) {
+			arrTimezone = undefined;
+			return;
+		}
+		getConvexClient()
+			.query(api.airports.getByIcao, { icao })
+			.then((airport) => {
+				if (arrAirport === icao) arrTimezone = airport?.timezone;
+			})
+			.catch(() => {});
+	});
 
 	// Populate from flight prop (edit mode)
 	let populatedFor = $state('');
@@ -174,6 +211,20 @@
 
 	const displayTimeOut = $derived(timeOut || inferredTimeOut || '');
 	const displayTimeIn = $derived(timeIn || inferredTimeIn || '');
+
+	// Local time displays: dep timezone for Out/Off, arr timezone for On/In
+	const localTimeOut = $derived(
+		depTimezone && displayTimeOut ? formatLocalTime(displayTimeOut, flightDate, depTimezone) : null
+	);
+	const localTimeOff = $derived(
+		depTimezone && timeOff ? formatLocalTime(timeOff, flightDate, depTimezone) : null
+	);
+	const localTimeOn = $derived(
+		arrTimezone && timeOn ? formatLocalTime(timeOn, flightDate, arrTimezone) : null
+	);
+	const localTimeIn = $derived(
+		arrTimezone && displayTimeIn ? formatLocalTime(displayTimeIn, flightDate, arrTimezone) : null
+	);
 
 	// Conflict: user set Out, In, AND Total manually, but they disagree
 	const timeConflict = $derived.by(() => {
@@ -452,6 +503,9 @@
 					inputmode="numeric"
 					class:inferred={!timeOut && !!inferredTimeOut}
 				/>
+				{#if localTimeOut}
+					<small class="local-time">{localTimeOut}</small>
+				{/if}
 				{#if !timeOut && inferredTimeOut}
 					<small style="color: gray; font-style: italic;">inferred from In + Total</small>
 				{/if}
@@ -468,6 +522,9 @@
 					maxlength="4"
 					inputmode="numeric"
 				/>
+				{#if localTimeOff}
+					<small class="local-time">{localTimeOff}</small>
+				{/if}
 				{#if fieldErrors.timeOff}<small style="color: red;">{fieldErrors.timeOff}</small>{/if}
 			</div>
 
@@ -481,6 +538,9 @@
 					maxlength="4"
 					inputmode="numeric"
 				/>
+				{#if localTimeOn}
+					<small class="local-time">{localTimeOn}</small>
+				{/if}
 				{#if fieldErrors.timeOn}<small style="color: red;">{fieldErrors.timeOn}</small>{/if}
 			</div>
 
@@ -497,6 +557,9 @@
 					inputmode="numeric"
 					class:inferred={!timeIn && !!inferredTimeIn}
 				/>
+				{#if localTimeIn}
+					<small class="local-time">{localTimeIn}</small>
+				{/if}
 				{#if !timeIn && inferredTimeIn}
 					<small style="color: gray; font-style: italic;">inferred from Out + Total</small>
 				{/if}
@@ -643,5 +706,10 @@
 	.inferred {
 		color: gray;
 		font-style: italic;
+	}
+	.local-time {
+		color: #666;
+		font-size: 0.85em;
+		margin-left: 0.5em;
 	}
 </style>

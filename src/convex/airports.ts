@@ -71,8 +71,11 @@ export const create = mutation({
 		name: v.string(),
 		city: v.optional(v.string()),
 		country: v.optional(v.string()),
+		state: v.optional(v.string()),
 		latitude: v.optional(v.float64()),
-		longitude: v.optional(v.float64())
+		longitude: v.optional(v.float64()),
+		elevation_ft: v.optional(v.float64()),
+		timezone: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
 		const userId = await getUserId(ctx);
@@ -83,8 +86,11 @@ export const create = mutation({
 			iata?: string;
 			city?: string;
 			country?: string;
+			state?: string;
 			latitude?: number;
 			longitude?: number;
+			elevation_ft?: number;
+			timezone?: string;
 		} = {
 			...args,
 			icao: args.icao.toUpperCase(),

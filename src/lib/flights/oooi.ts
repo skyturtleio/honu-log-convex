@@ -164,6 +164,44 @@ export function inferZuluTime(baseZulu: string, minutes: number, add: boolean): 
 }
 
 /**
+ * Format a Zulu time string as local time in a given IANA timezone.
+ * Returns e.g. "0722 EDT" or null if inputs are invalid or timezone is missing.
+ *
+ * @param zuluStr - 4-digit Zulu string (e.g. "1122")
+ * @param flightDate - "YYYY-MM-DD" date for DST resolution
+ * @param timezone - IANA timezone (e.g. "America/New_York")
+ */
+export function formatLocalTime(
+	zuluStr: string,
+	flightDate: string,
+	timezone: string
+): string | null {
+	const parsed = parseZulu(zuluStr);
+	if (!parsed) return null;
+
+	const d = new Date(`${flightDate}T00:00:00Z`);
+	if (isNaN(d.getTime())) return null;
+	d.setUTCHours(parsed.hours, parsed.minutes, 0, 0);
+
+	try {
+		const fmt = new Intl.DateTimeFormat('en-US', {
+			timeZone: timezone,
+			hour: '2-digit',
+			minute: '2-digit',
+			timeZoneName: 'short',
+			hour12: false
+		});
+		const parts = fmt.formatToParts(d);
+		const hour = parts.find((p) => p.type === 'hour')?.value ?? '';
+		const minute = parts.find((p) => p.type === 'minute')?.value ?? '';
+		const tzName = parts.find((p) => p.type === 'timeZoneName')?.value ?? '';
+		return `${hour}${minute} ${tzName}`;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Extract 4-digit Zulu display from ISO 8601 string (e.g. "2024-03-15T23:50:00.000Z" → "2350")
  */
 export function toZuluDisplay(iso?: string): string {

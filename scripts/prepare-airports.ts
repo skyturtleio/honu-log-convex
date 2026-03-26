@@ -9,6 +9,7 @@
  */
 
 import { readFileSync } from 'fs';
+import { find } from 'geo-tz';
 
 const csvPath = process.argv[2];
 if (!csvPath) {
@@ -43,8 +44,10 @@ for (let i = 1; i < lines.length; i++) {
 	const name = fields[col['name']]?.trim();
 	const city = fields[col['municipality']]?.trim() || undefined;
 	const country = fields[col['iso_country']]?.trim() || undefined;
+	const state = fields[col['iso_region']]?.trim() || undefined;
 	const lat = parseFloat(fields[col['latitude_deg']]);
 	const lon = parseFloat(fields[col['longitude_deg']]);
+	const elev = parseFloat(fields[col['elevation_ft']]);
 
 	if (!name) continue;
 
@@ -55,8 +58,14 @@ for (let i = 1; i < lines.length; i++) {
 	if (iata) doc.iata = iata;
 	if (city) doc.city = city;
 	if (country) doc.country = country;
+	if (state) doc.state = state;
 	if (!isNaN(lat)) doc.latitude = lat;
 	if (!isNaN(lon)) doc.longitude = lon;
+	if (!isNaN(elev)) doc.elevation_ft = elev;
+	if (!isNaN(lat) && !isNaN(lon)) {
+		const tzs = find(lat, lon);
+		if (tzs.length > 0) doc.timezone = tzs[0];
+	}
 
 	console.log(JSON.stringify(doc));
 	count++;

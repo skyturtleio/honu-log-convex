@@ -93,8 +93,11 @@ export default defineSchema({
 		name: v.string(),
 		city: v.optional(v.string()),
 		country: v.optional(v.string()),
+		state: v.optional(v.string()), // ISO 3166-2 subdivision (e.g. "US-GA")
 		latitude: v.optional(v.float64()),
-		longitude: v.optional(v.float64())
+		longitude: v.optional(v.float64()),
+		elevation_ft: v.optional(v.float64()),
+		timezone: v.optional(v.string()) // IANA timezone (e.g. "America/New_York")
 	})
 		.index('by_icao', ['icao'])
 		.index('by_iata', ['iata'])
