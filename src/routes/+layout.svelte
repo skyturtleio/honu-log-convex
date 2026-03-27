@@ -5,6 +5,8 @@
 	import { getConvexClient } from '$lib/convex';
 	import { flightsCollection } from '$lib/collections/useFlights';
 	import { aircraftCollection } from '$lib/collections/useAircraft';
+	import { reconcileCollection } from '$lib/reconcile';
+	import { api } from '../convex/_generated/api';
 
 	let { children } = $props();
 
@@ -27,6 +29,15 @@
 		await Promise.all([flightsCollection.init(), aircraftCollection.init()]);
 
 		ready = true;
+
+		// Reconcile local CRDT cache with server after init (non-blocking).
+		// Catches ghost documents left by direct Convex dashboard deletions.
+		if (page.data.user) {
+			Promise.all([
+				reconcileCollection(aircraftCollection.get(), api.aircraft.listDocIds),
+				reconcileCollection(flightsCollection.get(), api.flights.listDocIds)
+			]).catch((err) => console.error('[reconcile] Failed:', err));
+		}
 	});
 </script>
 

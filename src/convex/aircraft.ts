@@ -17,6 +17,19 @@ const _aircraft = r<Aircraft>({
 
 export const { stream, material, recovery, insert, update, remove, mark, compact } = _aircraft;
 
+/** Returns document IDs that actually exist in the main table for the current user. */
+export const listDocIds = query({
+	args: {},
+	handler: async (ctx) => {
+		const userId = await getUserId(ctx);
+		const docs = await ctx.db
+			.query('aircraft')
+			.withIndex('by_owner', (q) => q.eq('ownerId', userId))
+			.collect();
+		return docs.map((d) => d.id);
+	}
+});
+
 // --- Vanilla Convex: aircraft_types (reference data) ---
 
 export const listTypes = query({

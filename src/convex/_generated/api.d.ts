@@ -13,6 +13,7 @@ import type * as airports from "../airports.js";
 import type * as debug from "../debug.js";
 import type * as flights from "../flights.js";
 import type * as model_auth from "../model/auth.js";
+import type * as model_replicateAuth from "../model/replicateAuth.js";
 import type * as types from "../types.js";
 
 import type {
@@ -27,6 +28,7 @@ declare const fullApi: ApiFromModules<{
   debug: typeof debug;
   flights: typeof flights;
   "model/auth": typeof model_auth;
+  "model/replicateAuth": typeof model_replicateAuth;
   types: typeof types;
 }>;
 
