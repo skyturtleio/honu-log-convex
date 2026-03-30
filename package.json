@@ -14,8 +14,8 @@
 		"format": "prettier --write .",
 		"test:unit": "vitest",
 		"test": "bun run test:unit --run",
-		"wt:add": "bash scripts/wt-add.sh",
-		"wt:rm": "bash scripts/wt-rm.sh",
+		"wt:add": "wt-add",
+		"wt:rm": "wt-rm",
 		"convex:coolify": "bash scripts/convex-coolify.sh"
 	},
 	"devDependencies": {
